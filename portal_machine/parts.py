@@ -104,7 +104,19 @@ def join_parts(settings):
     cmd += ["-map", "0:v"]
     if audio:
         cmd += ["-map", "1:a", "-c:a", "aac", "-b:a", "192k", "-shortest"]
-    cmd += ["-c:v", "copy", "-movflags", "+faststart",
-            "-t", f"{settings['duration']:.3f}", out]
+    cmd += ["-c:v", "copy"]
+    # faststart makes ffmpeg rewrite the whole file through a temp copy at
+    # the end — that needs ANOTHER final-file-sized chunk of disk on top of
+    # the parts + the final file. Only ask for it when that clearly fits
+    # (it only helps direct progressive playback; YouTube re-encodes anyway).
+    parts_bytes = sum(
+        os.path.getsize(os.path.join(pdir, f"part_{i:05d}.ts"))
+        for i in range(len(spans)))
+    free = shutil.disk_usage(os.path.dirname(os.path.abspath(out)) or ".").free
+    if free > parts_bytes * 2.4:
+        cmd += ["-movflags", "+faststart"]
+    else:
+        print("(skipping faststart remux to stay inside free disk space)")
+    cmd += ["-t", f"{settings['duration']:.3f}", out]
     subprocess.run(cmd, check=True)
     shutil.rmtree(pdir, ignore_errors=True)
