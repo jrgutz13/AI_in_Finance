@@ -218,6 +218,15 @@ SCENES = {
             locked=("p1", "p3", "p4"),  # arms (int), speed (time), density (re-seeds)
         ),
         SceneDef(
+            "tunnel_3d", "3D Portal Tunnel (raymarched)",
+            speed=(0.7, 1.2),
+            p1=(0.85, 1.25),       # tunnel radius
+            p2=(0.15, 0.55),       # path wobble
+            p3=(0.7, 1.3),         # fly speed
+            p4=(0.6, 1.6),         # glow amount
+            locked=("p3",),        # fly speed (scales time)
+        ),
+        SceneDef(
             "ripple_dive", "Ripple Dive",
             speed=(0.6, 1.1),
             p1=(2.5, 5.0),         # ripple frequency
