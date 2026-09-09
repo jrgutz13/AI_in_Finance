@@ -13,9 +13,11 @@ void main() {
     float arms = floor(u_p1 + 0.5);
 
     // --- spiral nebula arms (log-periodic: they wheel forever) ---------
-    float phase = mod(t * u_p3 * 0.25, TAU);
+    // wrap at a whole number of TAU, and only use whole-number multiples of
+    // zc below, so the wrap leaves the picture unchanged
+    float phase = mod(t * u_p3 * 0.25, TAU * 4.0);
     float zc = log(r) * 2.0 - phase;
-    float s = a * arms + zc * 1.6;
+    float s = a * arms + zc * 2.0;
     float armBand = 0.5 + 0.5 * sin(s);
     vec2 circ = vec2(cos(zc), sin(zc));
     float cloud = fbm(circ * 1.2 + vec2(cos(a * arms), sin(a * arms)));

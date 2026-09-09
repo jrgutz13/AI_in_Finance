@@ -13,11 +13,14 @@ void main() {
     float rho = log(r);
     float arms = floor(u_p1 + 0.5);
 
-    // phase kept in [0, TAU): everything below is TAU-periodic in zc,
-    // so the zoom runs forever with no float blow-up
-    float phase = mod(t * u_p3 * 0.6, TAU);
+    // The phase wraps so the zoom runs forever without float blow-up. For
+    // the wrap to be INVISIBLE, every single thing derived from zc below
+    // must be exactly TAU-periodic: only sin/cos of WHOLE-NUMBER multiples
+    // of zc, never zc used raw. Wrapping at 4*TAU makes the repeat long.
+    float phase = mod(t * u_p3 * 0.6, TAU * 4.0);
     float zc = rho * 3.0 - phase;              // log-depth coordinate
-    float s = a * arms + zc * u_p2;            // spiral coordinate
+    float twist = floor(u_p2 + 0.5);           // whole number: keeps s periodic
+    float s = a * arms + zc * twist;           // spiral coordinate
 
     // broad glowing arms + razor edge lines
     float band = sin(s);
@@ -31,14 +34,16 @@ void main() {
     // rings pulsing along the dive
     float ring = pow(abs(sin(zc * 2.0 + det * 2.5)), 12.0);
 
-    // cos(a) not raw a, and sin(s) not raw s: raw angles seam at +-pi
-    vec3 col = pal(sin(zc * 0.5) * 0.4 + 0.1 * cos(a) + det * u_p4 + t * 0.02)
+    // cos(a) not raw a, and sin(s) not raw s: raw angles seam at +-pi.
+    // sin(zc), not sin(zc*0.5): a half-multiple flips sign at each wrap.
+    vec3 col = pal(sin(zc) * 0.4 + 0.1 * cos(a) + det * u_p4 + t * 0.02)
                * (0.25 + 0.75 * armGlow);
     col += pal(det + 0.45) * edge * 1.3;
     col += pal(sin(zc) * 0.3 + 0.6) * ring * 0.5;
 
-    // sparkling particles caught in the spiral
-    float sp = noise(vec2(sin(s) * 2.5, zc * 3.0));
+    // sparkling particles caught in the spiral (sampled periodically, or
+    // the sparkle pattern would jump every wrap)
+    float sp = noise(vec2(sin(s) * 2.5, cos(zc * 3.0) * 2.5));
     col += vec3(1.0) * pow(sp, 14.0) * 1.1;
 
     // the center is infinitely far away: fade it to darkness

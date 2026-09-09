@@ -13,22 +13,26 @@ void main() {
     float rho = log(r);
     float arms = floor(u_p1 + 0.5);
 
-    float phase = mod(t * u_p3 * 0.7, TAU);
+    // wrap at a whole number of TAU; every use of zc below is a whole-number
+    // multiple, so the wrap is invisible
+    float phase = mod(t * u_p3 * 0.7, TAU * 4.0);
     float zc = rho * 2.5 - phase;
+    float twist = floor(u_p2 + 0.5);      // whole number: keeps s periodic
 
     vec3 col = vec3(0.0);
     // three harmonics of filaments, progressively finer and dimmer
     for (int h = 1; h <= 3; h++) {
         float fh = float(h);
-        float s = a * arms * fh + zc * u_p2 * (0.8 + 0.4 * fh)
+        float s = a * arms * fh + zc * twist * fh
                 + 0.35 * sin(zc * fh + a * 2.0);       // organic wobble
         float fil = pow(1.0 - abs(sin(s)), 14.0 + 6.0 * fh);
-        col += pal(fh * 0.16 + sin(zc * 0.7) * 0.3 + t * 0.02)
+        col += pal(fh * 0.16 + sin(zc) * 0.3 + t * 0.02)
                * fil * (1.1 / fh);
     }
 
-    // sparks swept along the filaments
-    float sp = noise(vec2(a * arms * 2.0 + zc * u_p2, zc * 4.0));
+    // sparks swept along the filaments (sampled periodically)
+    float sp = noise(vec2(sin(a * arms * 2.0 + zc * twist) * 2.0,
+                          cos(zc * 4.0) * 2.0));
     col += vec3(1.0) * pow(sp, 12.0) * u_p4 * 1.3;
 
     // periodic mist between the arms for depth

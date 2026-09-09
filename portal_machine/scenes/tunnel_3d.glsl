@@ -5,13 +5,22 @@
 // u_p1: tunnel radius   u_p2: path wobble
 // u_p3: fly speed       u_p4: glow amount
 
-#define PERIOD 16.0    // world repeats every 16 units of depth
-#define RINGS   4.0    // a portal ring every 4 units
+// The world repeats every PERIOD units and the flight offset wraps there.
+// For the wrap to be invisible EVERYTHING derived from depth must repeat on
+// exactly that cycle: frequencies must be whole-number multiples of K, and
+// mod() periods must divide PERIOD. A long PERIOD keeps the repeat subtle.
+#define PERIOD 48.0    // world repeats every 48 units of depth
+#define RINGS   4.0    // a portal ring every 4 units (48/4 = 12, exact)
+#define K      (TAU / PERIOD)
 
 // the tunnel's centerline weaves through space (periodic, so it tiles)
 vec2 path(float z) {
-    return u_p2 * vec2(sin(TAU * z / PERIOD),
-                       cos(TAU * z / (PERIOD * 0.5)) * 0.7);
+    return u_p2 * vec2(sin(z * K), cos(z * K * 2.0) * 0.7);
+}
+
+// depth-driven color, built from the repeat cycle so it never snaps
+float depthHue(float z) {
+    return 0.55 * sin(z * K) + 0.25 * sin(z * K * 3.0);
 }
 
 // distance field: negative inside the wall. Also reports ring proximity.
@@ -23,7 +32,7 @@ float map(vec3 p, float zoff, out float ringDist) {
     // corrugated tunnel wall (shallow: deep corrugation makes the distance
     // field overestimate, which lets rays punch through the surface)
     float wall = u_p1 - r
-               + 0.05 * sin(qz * 2.2) * sin(atan(p.y - c.y, p.x - c.x) * 6.0);
+               + 0.05 * sin(qz * K * 17.0) * sin(atan(p.y - c.y, p.x - c.x) * 6.0);
 
     // glowing portal rings repeated along the tunnel
     float zi = mod(qz, RINGS) - RINGS * 0.5;
@@ -64,7 +73,7 @@ void main() {
 
         // volumetric bloom shed by the rings as the ray passes them
         float depthFade = exp(-dist * 0.20);
-        glow += pal((p.z + zoff) * 0.06 + t * 0.03)
+        glow += pal(depthHue(p.z + zoff) + t * 0.03)
               * (0.014 * u_p4 / (abs(ringDist) + 0.055)) * depthFade;
 
         if (d < 0.0015 * dist + 0.001) { hit = true; break; }
@@ -96,10 +105,10 @@ void main() {
                     * smoothstep(0.06, 0.14, abs(fract(qz * 0.5) - 0.5));
         float seam = 1.0 - panel;
 
-        vec3 base = pal(qz * 0.05 + t * 0.02) * (0.35 + 0.65 * panel);
+        vec3 base = pal(depthHue(qz) + t * 0.02) * (0.35 + 0.65 * panel);
         col = base * (0.06 + 0.95 * diff) + vec3(1.0) * spec * 0.5;
-        col += pal(qz * 0.05 + 0.4) * fres * 0.9;      // rim / reflection
-        col += pal(qz * 0.05 + 0.7) * seam * 0.25;     // lit seams between panels
+        col += pal(depthHue(qz) + 0.4) * fres * 0.9;   // rim / reflection
+        col += pal(depthHue(qz) + 0.7) * seam * 0.25;  // lit seams between panels
         float fog = exp(-dist * 0.16);                  // depth fog
         col = col * fog + fogCol * (1.0 - fog);
     } else {

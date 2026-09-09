@@ -14,7 +14,7 @@ void main() {
 
     // organic wobble of the depth coordinate (seam-free: circle sampling)
     float wob = fbm(vec2(cos(a * 3.0), sin(a * 3.0)) * 1.1 + t * 0.05);
-    float phase = mod(t * u_p3 * 0.5, TAU);
+    float phase = mod(t * u_p3 * 0.5, TAU * 4.0);
     float zc = rho * u_p1 - phase + u_p2 * (wob - 0.5) * 2.0;
 
     // layered rings: a soft body, a bright rim, and a whisper-thin echo
@@ -24,7 +24,9 @@ void main() {
     float echo = pow(abs(sin(zc * 2.0 + 1.3)), 30.0);
 
     // each ring keeps its own hue as it travels outward
-    float ringId = sin(zc * 0.5 - 0.7);
+    // sin(zc), not sin(zc*0.5): a half-multiple flips sign at every phase
+    // wrap, which would snap every ring's color at once
+    float ringId = sin(zc - 0.7);
     // cos(a) not raw a: raw angle has a seam where atan wraps at +-pi
     vec3 col = pal(ringId * u_p4 + 0.06 * cos(a + t * 0.1) + t * 0.015) * (0.18 + 0.5 * body);
     col += pal(ringId * u_p4 + 0.35) * rim * 0.9;

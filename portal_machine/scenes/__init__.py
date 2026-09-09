@@ -156,11 +156,13 @@ SCENES = {
         SceneDef(
             "spiral_dive", "Infinite Spiral Dive",
             speed=(0.7, 1.2),
-            p2=(1.2, 3.5),         # twist tightness
             p3=(0.6, 1.3),         # dive speed
             p4=(0.5, 1.2),         # detail amount
-            choices={"p1": [2, 3, 4, 5, 6]},  # arms
-            locked=("p1", "p3"),   # arms (integer), dive speed (scales time)
+            choices={"p1": [2, 3, 4, 5, 6],   # arms
+                     "p2": [1, 2, 3]},        # twist (must be whole)
+            # twist must stay a whole number or the endless zoom would snap
+            # each time its phase wraps; see the note in spiral_dive.glsl
+            locked=("p1", "p2", "p3"),
         ),
         SceneDef(
             "droste_zoom", "Infinite Gem Rings",
@@ -202,11 +204,12 @@ SCENES = {
         SceneDef(
             "vortex", "Vortex",
             speed=(0.7, 1.2),
-            p2=(1.0, 2.8),         # twist tightness
             p3=(0.6, 1.3),         # flow speed
             p4=(0.5, 1.5),         # spark amount
-            choices={"p1": [3, 4, 5, 6, 7]},  # filament arms
-            locked=("p1", "p3"),   # arms (integer), flow speed (scales time)
+            choices={"p1": [3, 4, 5, 6, 7],   # filament arms
+                     "p2": [1, 2, 3]},        # twist (must be whole)
+            # twist must stay a whole number, as in spiral_dive
+            locked=("p1", "p2", "p3"),
         ),
         SceneDef(
             "galaxy_dive", "Galaxy Dive",

@@ -4,7 +4,16 @@
 // u_p1: mirror wedges (5..10)   u_p2: fold tightness
 // u_p3: fly speed               u_p4: glow amount
 
-#define REPEAT 5.0
+#define REPEAT 5.0            // jewel rings every 5 units
+// The flight offset wraps at WRAP (a whole number of jewel rings). Every
+// depth-derived quantity below repeats on exactly that cycle, or the wrap
+// would be visible as a snap.
+#define WRAP   (REPEAT * 5.0)
+#define K      (TAU / WRAP)
+
+float depthHue(float z) {
+    return 0.50 * sin(z * K) + 0.20 * sin(z * K * 3.0);
+}
 
 // mat: 0 = jewel, 1 = the surrounding corridor wall (kept dark, as backdrop)
 float kaleidoDE(vec3 p, float wedges, float fold, out float trap, out float mat) {
@@ -41,7 +50,7 @@ void main() {
     float t = u_time * u_speed;
     float wedges = floor(u_p1 + 0.5);
 
-    float zoff = mod(t * u_p3 * 1.3, REPEAT);
+    float zoff = mod(t * u_p3 * 1.3, WRAP);
 
     vec3 ro = vec3(0.0, 0.0, 0.0);
     vec3 rd = normalize(vec3(rot(t * 0.08) * uv, 1.3));
@@ -56,13 +65,14 @@ void main() {
         vec3 q = p;
         q.z += zoff;
         q.z = mod(q.z, REPEAT) - REPEAT * 0.5;
-        q = rotZ(u_p2 * 0.25 * (p.z + zoff)) * q;   // slow twist down the axis
+        // sine twist, not a linear ramp: a ramp resets at every wrap
+        q = rotZ(u_p2 * 0.9 * sin((p.z + zoff) * K)) * q;
 
         float d = kaleidoDE(q, wedges, u_p2, tr, mt);
         float ds = clamp(d * 0.7, 0.005, 0.8);
         // step-weighted so the halo is a real volumetric integral rather
         // than something that grows with the iteration count
-        glow += pal(tr * 1.1 + (p.z + zoff) * 0.05 + t * 0.03)
+        glow += pal(tr * 1.1 + depthHue(p.z + zoff) + t * 0.03)
               * (0.055 * u_p4 / (abs(d) + 0.10)) * ds * exp(-dist * 0.32);
 
         if (d < 0.0012 * dist + 0.0008) { hit = true; trap = tr; mat = mt; break; }
@@ -79,7 +89,7 @@ void main() {
         vec3 q0 = p;
         q0.z += zoff;
         q0.z = mod(q0.z, REPEAT) - REPEAT * 0.5;
-        q0 = rotZ(u_p2 * 0.25 * (p.z + zoff)) * q0;
+        q0 = rotZ(u_p2 * 0.9 * sin((p.z + zoff) * K)) * q0;
         float c = kaleidoDE(q0, wedges, u_p2, tr, mt);
         vec3 n = normalize(vec3(kaleidoDE(q0 + e.xyy, wedges, u_p2, tr, mt) - c,
                                 kaleidoDE(q0 + e.yxy, wedges, u_p2, tr, mt) - c,
@@ -94,14 +104,16 @@ void main() {
         // instead of a smooth rainbow gradient
         float qz = p.z + zoff;
         float ang = atan(p.y, p.x);
+        // 0.6 gives a tile period that divides WRAP exactly; 0.7 would not,
+        // so the panels would jump each time the flight offset wrapped
         float tile = smoothstep(0.05, 0.13, abs(fract(ang * wedges / TAU) - 0.5))
-                   * smoothstep(0.05, 0.13, abs(fract(qz * 0.7) - 0.5));
-        float etch = pow(abs(sin(ang * wedges * 2.0 + qz * 1.5)), 24.0);
+                   * smoothstep(0.05, 0.13, abs(fract(qz * 0.6) - 0.5));
+        float etch = pow(abs(sin(ang * wedges * 2.0 + qz * K * 6.0)), 24.0);
 
         // the wall is only a backdrop: keep it dim so the jewels carry the eye
         float wallDim = mix(1.0, 0.22, mat);
 
-        vec3 base = pal(trap * 1.3 + qz * 0.05 + t * 0.02) * (0.45 + 0.70 * tile);
+        vec3 base = pal(trap * 1.3 + depthHue(qz) + t * 0.02) * (0.45 + 0.70 * tile);
         col = base * (0.30 + 1.5 * diff) * wallDim + vec3(1.0) * spec * 0.9 * wallDim;
         col += pal(trap * 1.3 + 0.4) * fres * 1.1 * wallDim;   // jewel edges
         col += pal(trap + 0.65) * etch * 0.7 * wallDim;        // etched lines

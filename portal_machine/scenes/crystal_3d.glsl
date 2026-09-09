@@ -4,13 +4,19 @@
 // u_p3: drift speed      u_p4: inner glow
 
 #define CELL 3.2
+// The crystals are randomised per lattice cell, so the flight offset must
+// wrap after a WHOLE number of cells AND the per-cell random must repeat on
+// that same cycle (hence mod(id.z, CELLS_Z) below) — otherwise every wrap
+// swaps in a completely different set of crystals.
+#define CELLS_Z 8.0
+#define WRAP    (CELL * CELLS_Z)
 
 // one crystal cluster per lattice cell, each rotated by its own hash
 float crystalDE(vec3 p, float size, float spread, out float trap) {
     vec3 id = floor(p / CELL);
     vec3 q = mod(p, CELL) - CELL * 0.5;
 
-    float h = hash21(id.xy + id.z * 37.0);
+    float h = hash21(id.xy + mod(id.z, CELLS_Z) * 37.0);
     float h2 = hash11(h * 91.7);
     // push the cluster off-centre so the lattice never looks like a grid
     q -= (vec3(h, h2, fract(h * 7.3)) - 0.5) * spread;
@@ -26,10 +32,15 @@ float crystalDE(vec3 p, float size, float spread, out float trap) {
     // line up along the view axis and leave a visible dark cross ahead
     vec3 q2 = mod(p + CELL * 0.5, CELL) - CELL * 0.5;
     float h3 = hash21(floor((p + CELL * 0.5) / CELL).xy * 1.7
-                      + floor((p.z + CELL * 0.5) / CELL) * 53.0);
+                      + mod(floor((p.z + CELL * 0.5) / CELL), CELLS_Z) * 53.0);
     q2 -= (vec3(h3, fract(h3 * 5.1), fract(h3 * 11.3)) - 0.5) * spread * 0.8;
     q2 = rotZ(h3 * TAU) * rotY(fract(h3 * 3.7) * TAU) * q2;
     d = min(d, sdOctahedron(q2, size * (0.30 + 0.25 * h3)));
+
+    // Keep a clear channel along the flight path. Without this the camera
+    // periodically flies straight INTO a shard and the screen fills with one
+    // flat color — which reads as the motion stopping dead.
+    d = max(d, 1.15 - length(p.xy));
     return d;
 }
 
@@ -37,7 +48,7 @@ void main() {
     vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
     float t = u_time * u_speed;
 
-    float zoff = mod(t * u_p3 * 1.0, CELL);
+    float zoff = mod(t * u_p3 * 1.0, WRAP);
 
     vec3 ro = vec3(0.5 * sin(t * 0.09), 0.4 * cos(t * 0.07), 0.0);
     vec3 rd = normalize(vec3(rot(t * 0.04) * uv, 1.4));
