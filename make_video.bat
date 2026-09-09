@@ -62,6 +62,8 @@ if "%DUR%"=="" set DUR=1m
 
 echo.
 echo Which visual style?
+echo.
+echo   -- flat styles (fast) --------------------------------------------
 echo   1   Neon Portal Tunnel        11  Data Tide (particle ocean)
 echo   2   Kaleidoscope              12  Infinite Spiral Dive
 echo   3   Infinite Fractal Zoom     13  Infinite Gem Rings
@@ -71,9 +73,16 @@ echo   6   Hyperdrive                16  Hypno Polygons
 echo   7   Liquid Marble             17  Vortex
 echo   8   Machine Dream (Refik)     18  Galaxy Dive
 echo   9   Data Wind (Refik)         19  Ripple Dive
-echo   10  Machine Bloom (Refik)     20  Mix of everything
+echo   10  Machine Bloom (Refik)
+echo.
+echo   -- TRUE 3D styles (real depth + lighting, render slower) ---------
+echo   20  3D Portal Tunnel          23  3D Kaleidoscope
+echo   21  3D Mandelbulb             24  3D Crystal Caves
+echo   22  3D Menger Corridors       25  3D Wormhole
+echo.
+echo   26  Mix of everything
 set "STYLE="
-set /p STYLE="Choose 1-20 [press Enter for 1]: "
+set /p STYLE="Choose 1-26 [press Enter for 1]: "
 if "%STYLE%"=="" set STYLE=1
 
 set "SCENEARG="
@@ -96,6 +105,21 @@ if "%STYLE%"=="16" set "SCENEARG=--scenes nested_squares"
 if "%STYLE%"=="17" set "SCENEARG=--scenes vortex"
 if "%STYLE%"=="18" set "SCENEARG=--scenes galaxy_dive"
 if "%STYLE%"=="19" set "SCENEARG=--scenes ripple_dive"
+if "%STYLE%"=="20" set "SCENEARG=--scenes tunnel_3d"
+if "%STYLE%"=="21" set "SCENEARG=--scenes mandelbulb_3d"
+if "%STYLE%"=="22" set "SCENEARG=--scenes menger_3d"
+if "%STYLE%"=="23" set "SCENEARG=--scenes kaleido_3d"
+if "%STYLE%"=="24" set "SCENEARG=--scenes crystal_3d"
+if "%STYLE%"=="25" set "SCENEARG=--scenes wormhole_3d"
+
+REM the 3D styles trace rays per pixel, so they cost a lot more per frame
+set "IS3D="
+for %%N in (20 21 22 23 24 25) do if "%STYLE%"=="%%N" set "IS3D=1"
+if defined IS3D (
+    echo.
+    echo NOTE: 3D styles render roughly 3-10x slower than the flat ones.
+    echo       1080p is recommended; 4K may take days for a 3-hour video.
+)
 
 echo.
 echo Resolution?

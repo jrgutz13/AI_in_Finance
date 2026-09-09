@@ -60,3 +60,50 @@ float fbm(vec2 p) {
 vec3 tonemap(vec3 c) {
     return 1.0 - exp(-c);
 }
+
+// ---------------------------------------------------------------------
+// 3D helpers, used by the raymarched scenes
+// ---------------------------------------------------------------------
+
+mat3 rotX(float a) {
+    float c = cos(a), s = sin(a);
+    return mat3(1, 0, 0, 0, c, -s, 0, s, c);
+}
+mat3 rotY(float a) {
+    float c = cos(a), s = sin(a);
+    return mat3(c, 0, s, 0, 1, 0, -s, 0, c);
+}
+mat3 rotZ(float a) {
+    float c = cos(a), s = sin(a);
+    return mat3(c, -s, 0, s, c, 0, 0, 0, 1);
+}
+
+// signed distance functions: negative inside, positive outside
+float sdSphere(vec3 p, float r) {
+    return length(p) - r;
+}
+float sdBox(vec3 p, vec3 b) {
+    vec3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+float sdTorus(vec3 p, vec2 t) {
+    return length(vec2(length(p.xz) - t.x, p.y)) - t.y;
+}
+float sdOctahedron(vec3 p, float s) {
+    p = abs(p);
+    return (p.x + p.y + p.z - s) * 0.57735027;
+}
+// infinite cross of square tubes — the piece cut out of a Menger sponge
+float sdCross(vec3 p, float s) {
+    float a = max(abs(p.x), abs(p.y));
+    float b = max(abs(p.y), abs(p.z));
+    float c = max(abs(p.z), abs(p.x));
+    return min(a, min(b, c)) - s;
+}
+
+// 3D noise built from the 2D helper, cheap enough for volumetric haze
+float noise3(vec3 p) {
+    float f = floor(p.z);
+    return mix(noise(p.xy + f * 13.7), noise(p.xy + (f + 1.0) * 13.7),
+               smoothstep(0.0, 1.0, p.z - f));
+}

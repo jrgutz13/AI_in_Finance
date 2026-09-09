@@ -86,9 +86,30 @@ to force a single-style continuous render.
 | `galaxy_dive` | flying into a spiral galaxy: arms, dust lanes, star streams |
 | `ripple_dive` | soft luminous ripples gliding out of infinite depth |
 
+### True 3D scenes (raymarched)
+
+These trace a ray per pixel through real 3D space, so they have genuine
+perspective, parallax, surface lighting, specular highlights and volumetric
+fog — the camera is physically flying through modeled geometry rather than
+through a flat pattern that imitates depth.
+
+| scene | look |
+| --- | --- |
+| `tunnel_3d` | panelled portal tunnel with lit rings receding into fog |
+| `mandelbulb_3d` | orbiting the classic 3D fractal as its surface morphs |
+| `menger_3d` | flying the corridors of an infinite Menger sponge |
+| `kaleido_3d` | mirrored 3D jewels receding with real depth |
+| `crystal_3d` | drifting through caves of glowing faceted crystal |
+| `wormhole_3d` | organic ridged tube threaded with bioluminescent veins |
+
+**They cost roughly 3–10x more per frame than the flat scenes.** Render them
+at 1080p (or 1440p) rather than 4K: a 3-hour 1080p 3D video is an overnight
+job, while 4K could take days. Everything else — continuous evolution,
+crash-safe parts, resume, bitrate caps — works exactly the same.
+
 All traveling scenes fly FORWARD (into the screen / toward the viewer), and
-the infinite-zoom scenes use log-periodic math, so they can run for hours
-without ever repeating or degrading.
+the infinite-zoom and 3D scenes use periodic/bounded math, so they can run
+for hours without ever repeating or degrading.
 
 Adding a scene = dropping a new `.glsl` file in `portal_machine/scenes/` and
 registering it (with the ranges its random parameters are drawn from) in
