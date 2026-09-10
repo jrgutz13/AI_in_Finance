@@ -64,7 +64,9 @@ SCENES = {
         ),
         SceneDef(
             "kaleidoscope", "Kaleidoscope",
-            speed=(0.6, 1.2),
+            # deliberately slow: this one reads as frantic at the speeds the
+            # other scenes use. Override globally with --speed-scale.
+            speed=(0.22, 0.42),
             p2=(0.1, 0.35),        # breathe
             p3=(1.5, 4.0),         # pattern scale
             p4=(0.3, 1.2),         # radial color drift

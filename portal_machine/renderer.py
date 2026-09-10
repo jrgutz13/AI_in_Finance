@@ -51,8 +51,10 @@ def _create_context():
 
 
 class Renderer:
-    def __init__(self, width, height, scene_names=None):
+    def __init__(self, width, height, scene_names=None, speed_scale=1.0):
         self.width, self.height = width, height
+        # multiplies every scene's motion rate; 0.5 = half speed
+        self.speed_scale = speed_scale
         self.ctx = _create_context()
 
         quad = np.array([-1, -1, 3, -1, -1, 3], dtype="f4")
@@ -93,7 +95,10 @@ class Renderer:
         for key in ("speed", "p1", "p2", "p3", "p4"):
             # GLSL drops uniforms a shader doesn't use; skip those
             if "u_" + key in prog:
-                prog["u_" + key] = params[key]
+                value = params[key]
+                if key == "speed":
+                    value *= self.speed_scale
+                prog["u_" + key] = value
         # only some shaders declare u_continuous; ignore where it's absent
         if "u_continuous" in prog:
             prog["u_continuous"] = 1.0 if continuous else 0.0

@@ -95,6 +95,9 @@ def main(argv=None):
                     help="bitrate ceiling in Mbit/s; keeps file size bounded "
                          "even on very noisy scenes (default: auto from "
                          "resolution, 0 = no ceiling)")
+    ap.add_argument("--speed-scale", type=float, default=1.0, metavar="X",
+                    help="multiply how fast everything moves: 0.5 = half "
+                         "speed, 2 = double (default 1)")
     ap.add_argument("--ignore-space", action="store_true",
                     help="skip the free-disk-space check before rendering")
     ap.add_argument("--part-length", type=float, default=600.0, metavar="SEC",
@@ -170,6 +173,7 @@ def main(argv=None):
         "audio": os.path.abspath(args.audio) if args.audio else None,
         "out": args.out or os.path.join("output", f"portal_{seed}.mp4"),
         "part_length": args.part_length,
+        "speed_scale": args.speed_scale,
     }
     return run(settings, still=args.still, ignore_space=args.ignore_space)
 
@@ -232,7 +236,9 @@ def run(settings, still=None, ignore_space=False, resuming=False):
                 print("Stopped before rendering (use --ignore-space to override).")
                 return 1
 
-    renderer = Renderer(w, h, scene_names=unique)
+    # .get() so part manifests written before this option existed still resume
+    renderer = Renderer(w, h, scene_names=unique,
+                        speed_scale=settings.get("speed_scale", 1.0))
 
     if still is not None:
         png = out.rsplit(".", 1)[0] + f"_t{still:.0f}.png"

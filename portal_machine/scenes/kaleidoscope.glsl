@@ -1,5 +1,5 @@
 // Mirrored-wedge kaleidoscope, cut sharp: crisp interference bands, thin
-// luminous edge lines, a fine lattice layer, micro-sparkle, and crisp rings.
+// luminous edge lines, a fine lattice layer, and crisp rings.
 // u_p1: wedge count (5..12)    u_p2: breathe amount
 // u_p3: pattern scale          u_p4: radial color drift
 
@@ -44,10 +44,6 @@ void main() {
     vec2 g = rot(-t * 0.07) * p * (u_p3 * 5.0);
     float lat = abs(fract(g.x) - 0.5) + abs(fract(g.y) - 0.5);
     col += pal(v * 0.3 + 0.25) * pow(max(0.0, 1.0 - lat), 14.0) * 0.5;
-
-    // micro-sparkle: tiny glints that slowly shimmer
-    float sp = noise(p * 90.0 + vec2(t * 0.6, -t * 0.4));
-    col += vec3(1.0) * pow(sp, 16.0) * 1.2;
 
     // crisp concentric rings sweeping outward
     float ring = pow(abs(sin(r * 16.0 - t * 1.1)), 40.0);

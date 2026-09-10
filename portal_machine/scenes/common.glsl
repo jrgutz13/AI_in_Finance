@@ -101,9 +101,7 @@ float sdCross(vec3 p, float s) {
     return min(a, min(b, c)) - s;
 }
 
-// 3D noise built from the 2D helper, cheap enough for volumetric haze
-float noise3(vec3 p) {
-    float f = floor(p.z);
-    return mix(noise(p.xy + f * 13.7), noise(p.xy + (f + 1.0) * 13.7),
-               smoothstep(0.0, 1.0, p.z - f));
-}
+// NOTE: never name a helper noise1/noise2/noise3/noise4 — those are built-in
+// GLSL function names. Redeclaring one with a different return type compiles
+// on some software renderers but fails on real GPU drivers with
+// "overloaded functions must have the same return type".
