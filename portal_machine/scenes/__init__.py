@@ -223,6 +223,15 @@ SCENES = {
             locked=("p1", "p3", "p4"),  # arms (int), speed (time), density (re-seeds)
         ),
         SceneDef(
+            "alien_world", "Alien World Flyover",
+            speed=(0.5, 0.9),
+            p1=(0.25, 0.85),       # terrain roughness
+            p2=(55.0, 110.0),      # hill height
+            p3=(0.7, 1.2),         # fly speed
+            p4=(0.0, 1.0),         # alien color shift
+            locked=("p2", "p3"),   # height (terrain shape), speed (scales time)
+        ),
+        SceneDef(
             "mandelbulb_3d", "3D Mandelbulb",
             speed=(0.6, 1.0),
             p1=(6.0, 9.0),         # fractal power

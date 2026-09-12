@@ -105,3 +105,35 @@ float sdCross(vec3 p, float s) {
 // GLSL function names. Redeclaring one with a different return type compiles
 // on some software renderers but fails on real GPU drivers with
 // "overloaded functions must have the same return type".
+
+// ---------------------------------------------------------------------
+// Periodic noise: repeats exactly every `per` lattice cells. Landscapes
+// built from this can wrap their world offset with no visible seam, which
+// is what lets a fly-through run for hours without drifting into float
+// precision loss.
+// ---------------------------------------------------------------------
+
+float phash(vec2 i, float per) {
+    return hash21(mod(i, vec2(per)));
+}
+
+float pnoise(vec2 p, float per) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(phash(i,               per), phash(i + vec2(1, 0), per), f.x),
+               mix(phash(i + vec2(0, 1), per), phash(i + vec2(1, 1), per), f.x), f.y);
+}
+
+// Octaves double in frequency AND in period, so the whole sum keeps the
+// base period. (No rotation between octaves — that would break periodicity.)
+float pfbm(vec2 p, float per, int octaves) {
+    float v = 0.0, a = 0.5, pe = per;
+    for (int i = 0; i < 8; i++) {
+        if (i >= octaves) break;
+        v += a * pnoise(p, pe);
+        p *= 2.0;
+        pe *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
