@@ -85,6 +85,7 @@ to force a single-style continuous render.
 | `vortex` | whirlpool of glowing filaments spiraling outward forever |
 | `galaxy_dive` | flying into a spiral galaxy: arms, dust lanes, star streams |
 | `ripple_dive` | soft luminous ripples gliding out of infinite depth |
+| `alien_world` | POV flight over a photoreal-style alien landscape with real atmosphere |
 
 ### True 3D scenes (raymarched)
 

@@ -79,10 +79,11 @@ echo   -- TRUE 3D styles (real depth + lighting, render slower) ---------
 echo   20  3D Portal Tunnel          23  3D Kaleidoscope
 echo   21  3D Mandelbulb             24  3D Crystal Caves
 echo   22  3D Menger Corridors       25  3D Wormhole
+echo   26  Alien World Flyover (photoreal landscape)
 echo.
-echo   26  Mix of everything
+echo   27  Mix of everything
 set "STYLE="
-set /p STYLE="Choose 1-26 [press Enter for 1]: "
+set /p STYLE="Choose 1-27 [press Enter for 1]: "
 if "%STYLE%"=="" set STYLE=1
 
 set "SCENEARG="
@@ -111,10 +112,11 @@ if "%STYLE%"=="22" set "SCENEARG=--scenes menger_3d"
 if "%STYLE%"=="23" set "SCENEARG=--scenes kaleido_3d"
 if "%STYLE%"=="24" set "SCENEARG=--scenes crystal_3d"
 if "%STYLE%"=="25" set "SCENEARG=--scenes wormhole_3d"
+if "%STYLE%"=="26" set "SCENEARG=--scenes alien_world"
 
 REM the 3D styles trace rays per pixel, so they cost a lot more per frame
 set "IS3D="
-for %%N in (20 21 22 23 24 25) do if "%STYLE%"=="%%N" set "IS3D=1"
+for %%N in (20 21 22 23 24 25 26) do if "%STYLE%"=="%%N" set "IS3D=1"
 if defined IS3D (
     echo.
     echo NOTE: 3D styles render roughly 3-10x slower than the flat ones.
