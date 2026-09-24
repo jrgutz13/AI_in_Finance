@@ -117,6 +117,37 @@ registering it (with the ranges its random parameters are drawn from) in
 `portal_machine/scenes/__init__.py`. Helpers (`pal`, `fbm`, `rot`, …) come
 from `common.glsl`; four generic uniforms `u_p1..u_p4` carry the randomness.
 
+## Blender Worlds (photoreal-style landscapes)
+
+A second generator, separate from the shader modes: an endless POV glide
+along a water channel through a bioluminescent alien world — glowing
+"supertree" groves with fairy-light canopies and spiral light bands, ground
+carpeted in glowing specks, neon fungi and tendril plants, reflective water
+with drifting bioluminescent patches, a dramatic sky with lit clouds and
+stars, and low haze. The world drifts continuously between four biomes
+(sunset shores, blue night, magenta dream, pink dusk) with no cuts.
+
+**Needs Blender** (free): install **Blender 4.5 LTS** from
+https://www.blender.org/download/lts/ . Tested on Blender 4.0, 4.5 LTS
+and 5.0.
+
+- **Windows:** double-click **`make_world.bat`**. It can render a preview
+  picture of the world first, so you can check the look before committing
+  to a long render.
+- **Command line:** `python blender_worlds/make_world.py --duration 3h
+  --audio music.mp3` (`--preview 45` renders a single still instead).
+
+These are genuinely 3D scenes rendered by Blender's EEVEE engine, so they
+are **much slower than the shader modes**. Double-click
+**`test_world_speed.bat`** first (or `--speed-test`): it renders a few real
+frames on your machine and tells you how long 10-minute, 1-hour and 3-hour
+videos would take. `--quality draft`
+is fastest; `--speed-scale 0.5` slows the camera.
+
+Worlds render in 60-second crash-safe chunks: after a power cut, run
+`make_world.bat` again (or `--resume`) and it continues from the last frame
+on disk. Bloom glow is added when each chunk is encoded.
+
 ## If a render gets interrupted (power loss, crash, disk full)
 
 Videos longer than 10 minutes render in **crash-safe parts**: every ~10

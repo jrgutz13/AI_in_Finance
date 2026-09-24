@@ -32,30 +32,32 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM if a previous render was interrupted (power loss, crash), offer to finish it
+REM if a previous render was interrupted (power loss, crash), offer to finish it.
+REM Labels + goto, not an if-block: inside ( ... ) a variable set by set /p is
+REM read before the prompt runs, so answering "n" used to be ignored.
 %PY% generate.py --resume-info >nul 2>nul
-if not errorlevel 1 (
-    %PY% generate.py --resume-info
-    set "RESUME="
-    set /p RESUME="Finish this interrupted video? [Y/n]: "
-    if /i not "%RESUME%"=="n" (
-        %PY% generate.py --resume
-        if errorlevel 1 (
-            echo.
-            echo Something went wrong - see the message above.
-        ) else (
-            echo.
-            echo Done! Opening the output folder...
-            start output
-        )
-        pause
-        exit /b 0
-    )
-    echo OK, starting a new video instead. ^(The unfinished parts stay on disk
-    echo until that video is resumed or you delete its _parts folder.^)
+if errorlevel 1 goto :new_video
+%PY% generate.py --resume-info
+set "RESUME="
+set /p RESUME="Finish this interrupted video? [Y/n]: "
+if /i "%RESUME%"=="n" goto :skip_resume
+%PY% generate.py --resume
+if errorlevel 1 (
     echo.
+    echo Something went wrong - see the message above.
+) else (
+    echo.
+    echo Done! Opening the output folder...
+    start output
 )
+pause
+exit /b 0
+:skip_resume
+echo OK, starting a new video instead. ^(The unfinished parts stay on disk
+echo until that video is resumed or you delete its _parts folder.^)
+echo.
 
+:new_video
 set "DUR="
 set /p DUR="Video length (examples: 45s, 10m, 3h) [press Enter for 1m]: "
 if "%DUR%"=="" set DUR=1m
