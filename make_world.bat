@@ -66,8 +66,10 @@ set "QARG=--quality standard"
 if "%Q%"=="1" set "QARG=--quality draft"
 if "%Q%"=="3" set "QARG=--quality high"
 
-REM pick the seed here so the preview and the video show the same world
-set "SEED=%RANDOM%%RANDOM%"
+REM pick the seed here so the preview and the video show the same world.
+REM The leading 1 matters: %RANDOM% can be 0, and a seed like "0123" would be
+REM read by Python as 123, so the preview file name would not match.
+set "SEED=1%RANDOM%%RANDOM%"
 
 REM ---- optional preview picture ------------------------------------------
 echo.

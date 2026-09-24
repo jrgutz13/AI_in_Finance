@@ -183,28 +183,28 @@ BIOMES = [
         fog="#7a4a8a", fog_density=0.0060, ground="#0e0b18", ground_gain=1.0,
         water="#0a0d20", water_glow="#20ffd0", sun="#ffb070", sun_energy=1.4,
         speck=["#35e0ff", "#ff4fd8", "#ff8a3a"], canopy=["#40ffc0", "#ff5ad0"],
-        fungus=["#ff9a4a", "#ff6fb0", "#b070ff"], orb="#a8ecff", band="#ff7a30"),
+        fungus=["#ff9a4a", "#ff6fb0", "#b070ff"], orb="#a8ecff", band="#ff7a30", rock="#6c2c3c"),
     _biome(  # blue night forest: navy sky, cyan orbs, pink canopies
         zenith="#060a26", mid="#15225e", horizon="#3c2c8e", glow="#7a5aff",
         cloud_lit="#3e3e96", cloud_dark="#0a0c2c", stars=1.0,
         fog="#22327e", fog_density=0.0085, ground="#070812", ground_gain=1.0,
         water="#05060f", water_glow="#30b8ff", sun="#6070ff", sun_energy=0.05,
         speck=["#3ab0ff", "#ff5ab0", "#ffa040"], canopy=["#3ad0ff", "#ff5ad8"],
-        fungus=["#ff70d0", "#40e0ff", "#ffb050"], orb="#80f0ff", band="#ff4aa0"),
+        fungus=["#ff70d0", "#40e0ff", "#ffb050"], orb="#80f0ff", band="#ff4aa0", rock="#1c1c3c"),
     _biome(  # magenta dream: near-black violet, red and cyan sparks
         zenith="#12061f", mid="#3c1047", horizon="#b2306c", glow="#ff5282",
         cloud_lit="#a23072", cloud_dark="#200a29", stars=0.7,
         fog="#521a52", fog_density=0.0080, ground="#0a0610", ground_gain=1.0,
         water="#08040c", water_glow="#ff3a7a", sun="#ff6090", sun_energy=0.25,
         speck=["#ff3a5a", "#3ad8ff", "#ff9030"], canopy=["#ff3a8a", "#40e8ff"],
-        fungus=["#ff4060", "#40f0ff", "#ff8a30"], orb="#ff9ad2", band="#40e8ff"),
+        fungus=["#ff4060", "#40f0ff", "#ff8a30"], orb="#ff9ad2", band="#40e8ff", rock="#3c142a"),
     _biome(  # pink dusk desert: lavender sky, warm ground, pale glow
         zenith="#3c4ca2", mid="#b272c2", horizon="#ffb28c", glow="#ffd2a2",
         cloud_lit="#ff92a2", cloud_dark="#6c4c92", stars=0.0,
         fog="#c28caa", fog_density=0.0050, ground="#3a2440", ground_gain=2.2,
         water="#3c2c52", water_glow="#7affff", sun="#ffc292", sun_energy=2.4,
         speck=["#ffe2a2", "#7affff", "#ff7c5c"], canopy=["#7cffd2", "#ffb2f2"],
-        fungus=["#ffd2a2", "#9cffff", "#ff9c8c"], orb="#ffffff", band="#ff9c6c"),
+        fungus=["#ffd2a2", "#9cffff", "#ff9c8c"], orb="#ffffff", band="#ff9c6c", rock="#c4525c"),
 ]
 
 
@@ -660,12 +660,47 @@ def build_plant(rng, pos, h, col, acc):
         add_specks(acc["plant"], pts[-1:], [0.035], col[None] * 1.3)
 
 
+def build_lamp_stalk(rng, pos, h, orb_col, b, acc):
+    """A tall curving stem with a glowing orb on top (like shot 2's lamps)."""
+    lean = rng.uniform(0.0, 0.12) * h
+    ang = rng.uniform(0.0, TAU)
+    t = np.linspace(0.0, 1.0, 16)
+    bend = lean * t ** 2
+    pts = np.stack([bend * np.cos(ang), bend * np.sin(ang), h * t], -1) + pos
+    v, f = tube(pts, 0.05 * (1.0 - 0.6 * t) + 0.015, 5)
+    acc["rib"].add(v, f, b["ground"] * 1.2)
+    # sparkles climbing the stem, then the orb itself
+    n = int(8 + 4 * h)
+    d = rng.uniform(0.05, 0.95, n)
+    sp = np.stack([np.interp(d, t, pts[:, i]) for i in range(3)], -1)
+    sp += rng.normal(0.0, 0.05, sp.shape)
+    add_specks(acc["speck"], sp, rng.uniform(0.02, 0.05, n),
+               pick_colors(rng, b["speck"], n))
+    add_specks(acc["orb"], pts[-1:] + [0.0, 0.0, 0.12], [rng.uniform(0.22, 0.4)],
+               orb_col[None])
+
+
+def build_rock_pillar(rng, pos, h, col, acc):
+    """Stacked, weathered sandstone hoodoo (like shot 4's red pillars)."""
+    rows = 20
+    zs = np.linspace(0.0, h, rows)
+    base_r = rng.uniform(0.18, 0.3) * h
+    s = zs / h
+    # a few ledges where softer layers eroded back
+    ledges = sum(0.12 * np.exp(-((s - c) / 0.05) ** 2) for c in rng.uniform(0.2, 0.9, 3))
+    r = base_r * (1.0 - 0.35 * s) * (1.0 - ledges) * (1.0 + 0.1 * rng.normal(0, 1, rows))
+    r[-1] = r[-2] * 0.6                       # rounded cap
+    v, f = revolve(np.clip(r, 0.05, None), zs, 10, pos, twist=rng.uniform(-0.2, 0.2))
+    layers = 0.8 + 0.25 * np.sin(np.repeat(zs, 10) * rng.uniform(2.0, 4.0))
+    acc["rock"].add(v, f, col[None, :] * layers[:, None])
+
+
 def build_tile(idx, seed, track, mats, coll):
     rng = np.random.default_rng([seed, idx + 1000003])
     y0 = idx * TILE
     b = track.at(y0 + TILE * 0.5)
     acc = {k: Accum() for k in ("speck", "bark", "band", "horn", "rib",
-                                "fungus", "plant", "orb")}
+                                "fungus", "plant", "orb", "rock")}
 
     # --- terrain: fine near the path, coarse far out, no T-junctions ---
     xs = np.concatenate([np.arange(-300.0, -70.0, 5.0), np.arange(-70.0, 70.0, 1.0),
@@ -736,6 +771,26 @@ def build_tile(idx, seed, track, mats, coll):
         build_plant(rng, (xx, yy, hg), rng.uniform(0.5, 2.2),
                     b["fungus"][rng.integers(3)] * 1.2, acc)
 
+    # --- lamp stalks with glowing orbs ---
+    for _ in range(int(rng.poisson(2.2))):
+        yy = rng.uniform(y0, y0 + TILE)
+        xx = float(cx(yy)) + rng.uniform(8.0, 70.0) * rng.choice([-1.0, 1.0])
+        hg = float(terrain(xx, yy, seed))
+        if hg < WATER + 0.05:
+            continue
+        orb = b["orb"] if rng.random() < 0.6 else b["canopy"][rng.integers(2)] * 1.3
+        build_lamp_stalk(rng, (xx, yy, hg - 0.05), rng.uniform(2.5, 7.0), orb, b, acc)
+
+    # --- red rock pillars standing in the middle distance ---
+    for _ in range(int(rng.poisson(0.55))):
+        yy = rng.uniform(y0, y0 + TILE)
+        xx = float(cx(yy)) + rng.uniform(30.0, 140.0) * rng.choice([-1.0, 1.0])
+        hg = float(terrain(xx, yy, seed))
+        if hg < WATER - 0.5:
+            continue
+        build_rock_pillar(rng, (xx, yy, hg - 0.8), rng.uniform(8.0, 26.0),
+                          b["rock"] * rng.uniform(0.8, 1.2), acc)
+
     # --- floating orbs ---
     for _ in range(int(rng.poisson(1.6))):
         yy = rng.uniform(y0, y0 + TILE)
@@ -805,6 +860,7 @@ class World:
             "fungus": mat_emissive("fungus", 1.25),
             "plant": mat_emissive("plant", 2.2),
             "orb": mat_emissive("orb", 3.2),
+            "rock": mat_surface("rock", 0.8),
         }
 
         # sun low and ahead-right: the sunset glow sits in the view
