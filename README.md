@@ -148,6 +148,35 @@ Worlds render in 60-second crash-safe chunks: after a power cut, run
 `make_world.bat` again (or `--resume`) and it continues from the last frame
 on disk. Bloom glow is added when each chunk is encoded.
 
+## Fractal Worlds (Mandelbulber2 fractal landscapes)
+
+An endless, collision-free flight over a fractal alien landscape — misty
+fields of spires under skies that drift through moods (golden hour, magenta
+dusk, teal dawn, violet noon, ember) while the sun slowly circles.
+
+**Needs Mandelbulber2** (free, open source):
+https://github.com/buddhi1980/mandelbulber2/releases — extract it anywhere.
+
+- **Windows:** double-click **`make_fractal.bat`** (it asks where
+  mandelbulber2.exe is the first time, and remembers). It can show a preview
+  picture of the journey before committing to a long render.
+- **Speed:** double-click **`test_fractal_speed.bat`** first. Mandelbulber is
+  slow on a CPU; it uses your graphics card automatically (OpenCL) when it
+  can, which is typically many times faster.
+- **Command line:** `python fractal_worlds/make_fractal.py --duration 3h --audio music.mp3`
+
+How it avoids crashing into the scenery: before rendering, it measures the
+ground height every half rock-width along the planned route (Mandelbulber
+reports no distances, so this uses two renders with different fog colors —
+the surface color cancels out, leaving the distance), then plans an altitude
+that always clears the terrain and climbs smoothly before spires. The route
+never repeats and never leaves the landscape; the view stays level like a
+stabilized drone.
+
+Crash-safe like the other tools (`--resume`). Each video writes a
+`_credits.txt`: the landscape comes from a Mandelbulber2 example scene, so
+paste that credit line into your video description.
+
 ## Clip Stitcher (long videos from short clips and images)
 
 AI video generators make clips of 5-20 seconds. The stitcher turns a
