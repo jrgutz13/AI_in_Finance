@@ -148,6 +148,32 @@ Worlds render in 60-second crash-safe chunks: after a power cut, run
 `make_world.bat` again (or `--resume`) and it continues from the last frame
 on disk. Bloom glow is added when each chunk is encoded.
 
+## Clip Stitcher (long videos from short clips and images)
+
+AI video generators make clips of 5-20 seconds. The stitcher turns a
+folder of them into one long video — 3 hours is fine:
+
+- **Windows:** double-click **`stitch_clips.bat`** and drag your folder in.
+- **Command line:** `python stitcher/stitch.py "my clips" --duration 3h --audio music.mp3`
+
+What it does:
+- Video clips are scaled to fill the frame (sound removed); still images
+  become slow cinematic shots — a gentle push-in or pull-back that drifts
+  across the picture, different every time the image appears.
+- Shots are shuffled and looped (never the same one twice in a row) until
+  the target length is reached, joined with smooth crossfades
+  (`--crossfade 2`), and the length comes out exact.
+- `--slow 2` plays clips at half speed with motion-interpolated in-between
+  frames: dreamier, and you need half as many clips. Rendering is much
+  slower with it on.
+- Writes a `_shots.txt` list of when each shot starts.
+- Crash-safe: the video is built from small pieces (each clip's middle and
+  each crossfade), so after a crash run `stitch_clips.bat` again (or
+  `--resume`). Memory use doesn't grow with the length of the video.
+
+The more distinct clips you give it, the less each one repeats — the
+stitcher prints how many times each source will appear.
+
 ## If a render gets interrupted (power loss, crash, disk full)
 
 Videos longer than 10 minutes render in **crash-safe parts**: every ~10
