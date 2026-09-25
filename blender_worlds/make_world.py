@@ -77,18 +77,24 @@ def find_blender(explicit=None):
     return None
 
 
-def bloom_filter(height):
-    """Soft glow around bright things: two blurred copies of the highlights
-    screened back over the frame (a tight halo and a wide one). Done here
-    rather than in Blender because Blender's bloom settings differ between
-    versions, while this is identical everywhere."""
+def bloom_filter(height, out_fmt="yuv420p"):
+    """Post-processing applied to every frame:
+    - bloom: two blurred copies of the highlights screened back over the
+      frame (a tight halo and a wide one) so bright things glow
+    - film: faint lens color fringing, a gentle vignette and fine moving
+      grain, which take the clinical computer-graphics edge off the image
+    Done in ffmpeg rather than Blender because Blender's bloom settings
+    differ between versions, while this is identical everywhere."""
     s1 = max(1.0, height / 180.0)
     s2 = max(2.0, height / 45.0)
+    ca = max(1, round(height / 1080))
     return (f"[0:v]format=gbrp,split=3[a][b][c];"
             f"[b]curves=all='0/0 0.62/0 1/1',gblur=sigma={s1:.2f}[g1];"
             f"[c]curves=all='0/0 0.55/0 1/1',gblur=sigma={s2:.2f}[g2];"
             f"[a][g1]blend=all_mode=screen:all_opacity=0.85[t];"
-            f"[t][g2]blend=all_mode=screen:all_opacity=0.45,format=yuv420p[out]")
+            f"[t][g2]blend=all_mode=screen:all_opacity=0.45,"
+            f"rgbashift=rh=-{ca}:bh={ca},vignette=angle=PI/5,"
+            f"format={out_fmt},noise=c0s=3:c0f=t[out]")
 
 
 def auto_maxrate_mbps(w, h, fps):
@@ -104,7 +110,8 @@ def run_blender(settings, first, last, frames_dir, progress):
            "--seed", str(settings["seed"]), "--start", str(first), "--end", str(last),
            "--outdir", frames_dir, "--width", str(settings["width"]),
            "--height", str(settings["height"]), "--fps", str(settings["fps"]),
-           "--samples", str(settings["samples"]), "--speed", str(settings["speed"])]
+           "--samples", str(settings["samples"]), "--speed", str(settings["speed"]),
+           "--engine", settings.get("engine", "eevee")]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, errors="replace")
     tail = []
@@ -144,7 +151,8 @@ def benchmark(settings, frames=8):
          "--seed", str(settings["seed"]), "--start", str(start),
          "--end", str(start + frames + 2), "--outdir", tmp,
          "--width", str(settings["width"]), "--height", str(settings["height"]),
-         "--fps", str(settings["fps"]), "--samples", str(settings["samples"])],
+         "--fps", str(settings["fps"]), "--samples", str(settings["samples"]),
+         "--engine", settings.get("engine", "eevee")],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
     for line in proc.stdout:
         if line.startswith("FRAME "):
@@ -261,6 +269,8 @@ def main(argv=None):
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--quality", choices=list(QUALITY), default="standard",
                     help="draft = fastest, high = cleanest (default standard)")
+    ap.add_argument("--engine", choices=["eevee", "cycles"], default="eevee",
+                    help="eevee = fast; cycles = photoreal path tracing, much slower")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--audio", default=None)
     ap.add_argument("--out", default=None)
@@ -322,11 +332,11 @@ def main(argv=None):
                         "--seed", str(seed), "--still", str(args.preview), "--out", png,
                         "--width", str(w), "--height", str(h),
                         "--samples", str(QUALITY[args.quality]),
-                        "--speed", str(args.speed_scale)],
+                        "--speed", str(args.speed_scale), "--engine", args.engine],
                        check=True, stdout=subprocess.DEVNULL)
         glow = png.rsplit(".", 1)[0] + "_glow.png"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", png,
-                        "-filter_complex", bloom_filter(h).replace("yuv420p", "rgb24"),
+                        "-filter_complex", bloom_filter(h, "rgb24"),
                         "-map", "[out]", glow], check=True)
         os.replace(glow, png)
         print(f"wrote      {png}")
@@ -335,19 +345,21 @@ def main(argv=None):
     settings = {
         "seed": seed, "duration": args.duration, "width": w, "height": h,
         "fps": args.fps, "samples": QUALITY[args.quality], "speed": args.speed_scale,
+        "engine": args.engine,
         "chunk": args.chunk, "crf": args.crf, "maxrate": auto_maxrate_mbps(w, h, args.fps),
         "audio": os.path.abspath(args.audio) if args.audio else None,
         "out": out, "parts_dir": out.rsplit(".", 1)[0] + "_parts", "blender": blender,
     }
     if args.speed_test:
-        print(f"Speed test: {w}x{h}, quality {args.quality}, Blender {blender}")
+        print(f"Speed test: {w}x{h}, quality {args.quality}, engine {args.engine}")
         return benchmark(settings)
 
     worst = settings["maxrate"] * 1e6 / 8 * args.duration / 1e9
     frames_tmp = args.chunk * args.fps * w * h * 0.25 / 1e9     # one chunk of JPEGs
     free = shutil.disk_usage(os.path.abspath("output")).free / 1e9
     print(f"seed       {seed}")
-    print(f"video      {w}x{h} @ {args.fps} fps, {fmt_ts(args.duration)}, quality {args.quality}")
+    print(f"video      {w}x{h} @ {args.fps} fps, {fmt_ts(args.duration)}, "
+          f"quality {args.quality}, engine {args.engine}")
     print(f"blender    {blender}")
     print(f"output     {out}")
     print(f"size       up to ~{worst:.1f} GB (+{frames_tmp:.1f} GB working space)")

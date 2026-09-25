@@ -346,6 +346,15 @@ def add_specks(acc, pos, size, col):
     acc.add(v.reshape(-1, 3), f.reshape(-1, 3), np.repeat(np.asarray(col), 6, axis=0))
 
 
+def add_sphere(acc, center, radius, col, rows=10, sides=16):
+    """A round glowing ball. Octahedra are fine for sub-centimeter sparkles,
+    but anything large enough to see reads as a diamond."""
+    th = np.linspace(0.0, math.pi, rows)
+    v, f = revolve(np.maximum(np.sin(th), 1e-3) * radius, -np.cos(th) * radius,
+                   sides, center)
+    acc.add(v, f, np.asarray(col, np.float64).reshape(-1)[:3])
+
+
 def pick_colors(rng, palette, n, weights=None, lo=0.6, hi=1.4):
     idx = rng.choice(len(palette), size=n, p=weights)
     return palette[idx] * rng.uniform(lo, hi, (n, 1))
@@ -384,6 +393,111 @@ def mat_surface(name, roughness, metallic=0.0):
     bs.inputs["Metallic"].default_value = metallic
     nt.links.new(at.outputs["Color"], bs.inputs["Base Color"])
     nt.links.new(bs.outputs["BSDF"], out.inputs["Surface"])
+    return m
+
+
+class _Nodes:
+    """Tiny helper for wiring shader node graphs readably."""
+
+    def __init__(self, nt):
+        self.nt = nt
+
+    def node(self, kind, **inputs):
+        n = self.nt.nodes.new(kind)
+        for k, v in inputs.items():
+            self.set(n.inputs[k], v)
+        return n
+
+    def set(self, sock, v):
+        if isinstance(v, bpy.types.NodeSocket):
+            self.nt.links.new(v, sock)
+        else:
+            sock.default_value = v
+
+    def noise(self, vec, scale, detail=8.0, rough=0.55):
+        n = self.node("ShaderNodeTexNoise", Vector=vec, Scale=scale, Detail=detail)
+        setp(n.inputs.get("Roughness"), "default_value", rough)
+        return n.outputs["Fac"]
+
+    def maprange(self, v, a, b, c=0.0, d=1.0):
+        return self.node("ShaderNodeMapRange", **{
+            "Value": v, "From Min": a, "From Max": b, "To Min": c, "To Max": d}
+        ).outputs["Result"]
+
+    def math(self, op, a, b):
+        n = self.nt.nodes.new("ShaderNodeMath")
+        n.operation = op
+        self.set(n.inputs[0], a)
+        self.set(n.inputs[1], b)
+        return n.outputs["Value"]
+
+    def vmul(self, a, b):
+        n = self.nt.nodes.new("ShaderNodeVectorMath")
+        n.operation = "MULTIPLY"
+        self.set(n.inputs[0], a)
+        self.set(n.inputs[1], b)
+        return n.outputs["Vector"]
+
+
+def mat_detailed(name, kind):
+    """Surface materials with real micro-detail, all in world space so the
+    pattern flows seamlessly across tile edges.
+
+    ground: rock and moss — large tonal patches, fine grit, cracks, and a
+            dark glossy wet band near the water line
+    bark:   vertical fibrous grain
+    rock:   horizontal sediment strata (sandstone pillars)
+    """
+    m, nt, out = _fresh(name)
+    N = _Nodes(nt)
+    pos = nt.nodes.new("ShaderNodeNewGeometry").outputs["Position"]
+    base = nt.nodes.new("ShaderNodeAttribute")
+    base.attribute_name = "col"
+    bsdf = N.node("ShaderNodeBsdfPrincipled")
+
+    if kind == "bark":
+        grain_vec = N.node("ShaderNodeMapping", Vector=pos, Scale=(4.0, 4.0, 0.35)).outputs["Vector"]
+        big = N.noise(grain_vec, 2.0, 10.0, 0.6)
+        fine = N.noise(pos, 9.0, 6.0)
+        tone = N.maprange(N.math("MULTIPLY", big, fine), 0.1, 0.5, 0.35, 1.5)
+        height = N.math("ADD", big, N.math("MULTIPLY", fine, 0.3))
+        rough = N.maprange(fine, 0.3, 0.7, 0.45, 0.85)
+        bump_strength = 0.8
+    elif kind == "rock":
+        strata_vec = N.node("ShaderNodeMapping", Vector=pos, Scale=(0.25, 0.25, 3.2)).outputs["Vector"]
+        strata = N.noise(strata_vec, 1.4, 6.0, 0.5)
+        fine = N.noise(pos, 5.0, 8.0)
+        tone = N.maprange(N.math("ADD", strata, N.math("MULTIPLY", fine, 0.4)), 0.4, 1.1, 0.5, 1.4)
+        height = N.math("ADD", strata, N.math("MULTIPLY", fine, 0.5))
+        rough = N.maprange(fine, 0.3, 0.7, 0.6, 0.95)
+        bump_strength = 0.7
+    else:  # ground
+        patch = N.noise(pos, 0.35, 10.0)
+        grit = N.noise(pos, 3.5, 8.0)
+        vor = nt.nodes.new("ShaderNodeTexVoronoi")
+        setp(vor, "feature", "DISTANCE_TO_EDGE")
+        N.set(vor.inputs["Vector"], pos)
+        N.set(vor.inputs["Scale"], 1.3)
+        cracks = N.maprange(vor.outputs["Distance"], 0.0, 0.06, 0.25, 1.0)
+        tone = N.math("MULTIPLY", N.maprange(patch, 0.3, 0.7, 0.35, 1.6),
+                      N.math("MULTIPLY", cracks, N.maprange(grit, 0.2, 0.8, 0.7, 1.2)))
+        height = N.math("ADD", N.math("MULTIPLY", grit, 0.5),
+                        N.math("ADD", N.math("MULTIPLY", patch, 0.3),
+                               N.math("MULTIPLY", cracks, 0.45)))
+        # wet band: glossy and darker just above the water line
+        z = N.node("ShaderNodeSeparateXYZ", Vector=pos).outputs["Z"]
+        wet = N.maprange(z, 0.08, 0.7, 0.0, 1.0)
+        tone = N.math("MULTIPLY", tone, N.maprange(wet, 0.0, 1.0, 0.5, 1.0))
+        rough = N.math("MULTIPLY", N.maprange(grit, 0.3, 0.7, 0.6, 0.97),
+                       N.maprange(wet, 0.0, 1.0, 0.25, 1.0))
+        bump_strength = 0.55
+
+    N.set(bsdf.inputs["Base Color"], N.vmul(base.outputs["Color"], tone))
+    N.set(bsdf.inputs["Roughness"], rough)
+    bump = N.node("ShaderNodeBump", Height=height, Strength=bump_strength)
+    N.set(bump.inputs["Distance"], 0.06)
+    N.set(bsdf.inputs["Normal"], bump.outputs["Normal"])
+    nt.links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
     return m
 
 
@@ -615,24 +729,24 @@ def build_tree(rng, base, H, b, acc):
         # lights along the rib, spaced ~0.35 m
         seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
         L = np.concatenate([[0.0], np.cumsum(seg)])
-        nl = max(4, int(L[-1] / 0.35))
+        nl = max(6, int(L[-1] / 0.26))
         d = np.sort(rng.uniform(0.0, L[-1], nl))
         lp = np.stack([np.interp(d, L, pts[:, i]) for i in range(3)], -1)
         lights_p.append(lp)
-        lights_s.append(rng.uniform(0.004, 0.008, nl) * H)
+        lights_s.append(rng.uniform(0.0026, 0.0052, nl) * H)
         lights_c.append(pick_colors(rng, np.stack([ca, cb, b["speck"][0]]), nl,
                                     [0.4, 0.45, 0.15], 0.7, 1.5))
     add_specks(acc["speck"], np.concatenate(lights_p), np.concatenate(lights_s),
                np.concatenate(lights_c))
 
     # sparkles clinging to the trunk
-    m = int(60 + 5 * H)
+    m = int(120 + 10 * H)
     zt = rng.uniform(0.0, top, m)
     at = rng.uniform(0.0, TAU, m)
     rt = np.interp(zt, zs, r) * 1.02
     add_specks(acc["speck"],
                np.stack([rt * np.cos(at), rt * np.sin(at), zt], -1) + base,
-               rng.uniform(0.003, 0.006, m) * H,
+               rng.uniform(0.0015, 0.003, m) * H,
                pick_colors(rng, b["speck"], m))
 
 
@@ -676,23 +790,33 @@ def build_lamp_stalk(rng, pos, h, orb_col, b, acc):
     sp += rng.normal(0.0, 0.05, sp.shape)
     add_specks(acc["speck"], sp, rng.uniform(0.02, 0.05, n),
                pick_colors(rng, b["speck"], n))
-    add_specks(acc["orb"], pts[-1:] + [0.0, 0.0, 0.12], [rng.uniform(0.22, 0.4)],
-               orb_col[None])
+    add_sphere(acc["orb"], pts[-1] + [0.0, 0.0, 0.12], rng.uniform(0.22, 0.4), orb_col)
 
 
 def build_rock_pillar(rng, pos, h, col, acc):
-    """Stacked, weathered sandstone hoodoo (like shot 4's red pillars)."""
-    rows = 20
+    """Weathered sandstone hoodoo (like shot 4's red pillars): an irregular,
+    eroded column with ledges, a rubble-flared base and a rounded cap."""
+    rows, sides = 36, 16
     zs = np.linspace(0.0, h, rows)
-    base_r = rng.uniform(0.18, 0.3) * h
     s = zs / h
-    # a few ledges where softer layers eroded back
-    ledges = sum(0.12 * np.exp(-((s - c) / 0.05) ** 2) for c in rng.uniform(0.2, 0.9, 3))
-    r = base_r * (1.0 - 0.35 * s) * (1.0 - ledges) * (1.0 + 0.1 * rng.normal(0, 1, rows))
-    r[-1] = r[-2] * 0.6                       # rounded cap
-    v, f = revolve(np.clip(r, 0.05, None), zs, 10, pos, twist=rng.uniform(-0.2, 0.2))
-    layers = 0.8 + 0.25 * np.sin(np.repeat(zs, 10) * rng.uniform(2.0, 4.0))
-    acc["rock"].add(v, f, col[None, :] * layers[:, None])
+    base_r = rng.uniform(0.16, 0.28) * h
+    ledges = sum(0.14 * np.exp(-((s - c) / 0.04) ** 2) for c in rng.uniform(0.15, 0.9, 4))
+    r = base_r * (1.0 - 0.3 * s) * (1.0 - ledges)
+    r *= 1.0 + 0.35 * np.exp(-s / 0.08)                  # rubble at the foot
+    r[-3:] *= np.array([0.85, 0.6, 0.2])                 # rounded cap
+    v, f = revolve(np.clip(r, 0.05, None), zs, sides, (0.0, 0.0, 0.0),
+                   twist=rng.uniform(-0.2, 0.2))
+    # break the perfect circles: a blocky outline that changes with height
+    ang = np.arctan2(v[:, 1], v[:, 0])
+    z = v[:, 2]
+    p1, p2, p3 = rng.uniform(0.0, TAU, 3)
+    wob = (0.18 * np.sin(ang * 3 + p1 + z * 0.3) + 0.12 * np.sin(ang * 5 + z * 0.8 + p2)
+           + 0.10 * np.sin(ang * 9 + z * 1.9 + p3))
+    v[:, 0] *= 1.0 + wob
+    v[:, 1] *= 1.0 + wob
+    v += np.asarray(pos, np.float64)
+    layers = 0.75 + 0.3 * np.sin(z * rng.uniform(1.5, 3.0))
+    acc["rock"].add(v, f, np.asarray(col)[None, :] * layers[:, None])
 
 
 def build_tile(idx, seed, track, mats, coll):
@@ -725,11 +849,14 @@ def build_tile(idx, seed, track, mats, coll):
     objs = [_link(f"terrain{idx}", me, mats["ground"], coll)]
 
     cx = lambda yy: channel_x(yy)
+    # (position, rgb, watts): point lights that make the glowing things
+    # actually illuminate the ground around them, like in real footage
+    lights = []
 
     # --- ground specks: dense and small near the path, sparser and larger
     # far away so they never shrink below a pixel and shimmer ---
-    for n, lo, hi, smin, smax in ((5200, 3.0, 55.0, 0.030, 0.085),
-                                  (2600, 55.0, 170.0, 0.12, 0.26)):
+    for n, lo, hi, smin, smax in ((9000, 3.0, 55.0, 0.012, 0.038),
+                                  (3200, 55.0, 170.0, 0.06, 0.14)):
         yy = rng.uniform(y0, y0 + TILE, n)
         off = rng.uniform(lo, hi, n) * rng.choice([-1.0, 1.0], n)
         xx = cx(yy) + off
@@ -748,19 +875,27 @@ def build_tile(idx, seed, track, mats, coll):
         if hg < -1.2:
             continue
         H = rng.uniform(14.0, 40.0) * (1.0 + 0.35 * (abs(off) > 80))
-        build_tree(rng, (xx, yy, max(hg, WATER) - 0.4), H, b, acc)
+        base = (xx, yy, max(hg, WATER) - 0.4)
+        build_tree(rng, base, H, b, acc)
+        # the glowing canopy throat lights the trunk and the ground below
+        lights.append(((xx, yy, base[2] + 0.62 * H), b["canopy"][0], 45.0 * H))
 
     # --- fungus clusters and neon tendril plants along the banks ---
     for _ in range(int(rng.poisson(11))):
         yy = rng.uniform(y0, y0 + TILE)
         xx = float(cx(yy)) + rng.uniform(7.0, 32.0) * rng.choice([-1.0, 1.0])
+        cluster_col = b["fungus"][rng.integers(3)]
+        hc = float(terrain(xx, yy, seed))
+        if hc > WATER + 0.05:
+            lights.append(((xx, yy, hc + 0.7), cluster_col, rng.uniform(18.0, 45.0)))
         for _ in range(int(rng.integers(3, 8))):
             px, py = xx + rng.normal(0, 0.9), yy + rng.normal(0, 0.9)
             hg = float(terrain(px, py, seed))
             if hg < WATER + 0.05:
                 continue
             h = rng.uniform(0.25, 1.4)
-            col = b["fungus"][rng.integers(3)] * rng.uniform(0.8, 1.3)
+            col = (cluster_col if rng.random() < 0.7 else b["fungus"][rng.integers(3)]) \
+                * rng.uniform(0.8, 1.3)
             build_mushroom((px, py, hg - 0.03), h, h * rng.uniform(0.35, 0.6), col, acc)
     for _ in range(int(rng.poisson(7))):
         yy = rng.uniform(y0, y0 + TILE)
@@ -779,7 +914,9 @@ def build_tile(idx, seed, track, mats, coll):
         if hg < WATER + 0.05:
             continue
         orb = b["orb"] if rng.random() < 0.6 else b["canopy"][rng.integers(2)] * 1.3
-        build_lamp_stalk(rng, (xx, yy, hg - 0.05), rng.uniform(2.5, 7.0), orb, b, acc)
+        sh = rng.uniform(2.5, 7.0)
+        build_lamp_stalk(rng, (xx, yy, hg - 0.05), sh, orb, b, acc)
+        lights.append(((xx, yy, hg + sh), orb, 40.0))
 
     # --- red rock pillars standing in the middle distance ---
     for _ in range(int(rng.poisson(0.55))):
@@ -796,13 +933,25 @@ def build_tile(idx, seed, track, mats, coll):
         yy = rng.uniform(y0, y0 + TILE)
         xx = float(cx(yy)) + rng.uniform(5.0, 60.0) * rng.choice([-1.0, 1.0])
         hg = max(float(terrain(xx, yy, seed)), WATER)
-        add_specks(acc["orb"], [(xx, yy, hg + rng.uniform(2.0, 9.0))],
-                   [rng.uniform(0.18, 0.45)], b["orb"][None])
+        oz = hg + rng.uniform(2.0, 9.0)
+        add_sphere(acc["orb"], (xx, yy, oz), rng.uniform(0.18, 0.45), b["orb"])
+        lights.append(((xx, yy, oz), b["orb"], 60.0))
 
     for key, a_ in acc.items():
         me = a_.build(f"{key}{idx}")
         if me is not None:
             objs.append(_link(f"{key}{idx}", me, mats[key], coll))
+    for k, (pos, col, watts) in enumerate(lights):
+        col = np.asarray(col, np.float64)
+        ld = bpy.data.lights.new(f"glow{idx}_{k}", "POINT")
+        ld.color = tuple(float(c) for c in col / max(col.max(), 1e-6))
+        ld.energy = float(watts)
+        setp(ld, "shadow_soft_size", 0.3)
+        setp(ld, "use_shadow", False)       # fill light: shadows add cost, not look
+        ob = bpy.data.objects.new(f"glow{idx}_{k}", ld)
+        ob.location = pos
+        coll.objects.link(ob)
+        objs.append(ob)
     return objs
 
 
@@ -816,6 +965,55 @@ def _link(name, me, mat, coll):
 # ---------------------------------------------------------------------------
 # scene assembly
 # ---------------------------------------------------------------------------
+
+def setup_cycles(scene, samples):
+    """Path tracing: physically simulated light. Uses the GPU when one is
+    found (NVIDIA OptiX/CUDA, AMD HIP, Intel oneAPI, Apple Metal) and
+    removes noise with Intel's OpenImageDenoise when this build has it."""
+    cy = scene.cycles
+    gpu = False
+    try:
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        for dt in ("OPTIX", "CUDA", "HIP", "ONEAPI", "METAL"):
+            try:
+                prefs.compute_device_type = dt
+            except TypeError:
+                continue
+            for refresh in ("refresh_devices", "get_devices"):
+                if hasattr(prefs, refresh):
+                    getattr(prefs, refresh)()
+                    break
+            devs = [d for d in prefs.devices if d.type == dt]
+            if devs:
+                for d in prefs.devices:
+                    d.use = d.type == dt
+                gpu = True
+                break
+    except (KeyError, AttributeError):
+        pass
+    cy.device = "GPU" if gpu else "CPU"
+    cy.samples = samples
+    setp(cy, "use_adaptive_sampling", True)
+    setp(cy, "adaptive_threshold", 0.03)
+    # The reliable availability flag lives in Cycles' own module; official
+    # blender.org builds ship the OpenImageDenoise denoiser, some Linux
+    # distribution builds do not (and then asking for it aborts the render).
+    try:
+        import _cycles
+        has_oidn = bool(getattr(_cycles, "with_openimagedenoise", False))
+    except ImportError:
+        has_oidn = False
+    setp(cy, "use_denoising", bool(has_oidn))
+    if has_oidn:
+        setp(cy, "denoiser", "OPENIMAGEDENOISE")
+    for k, v in (("max_bounces", 6), ("diffuse_bounces", 3), ("glossy_bounces", 3),
+                 ("transmission_bounces", 2), ("volume_bounces", 0),
+                 ("transparent_max_bounces", 8), ("sample_clamp_indirect", 4.0),
+                 ("volume_step_rate", 4.0), ("caustics_reflective", False),
+                 ("caustics_refractive", False)):
+        setp(cy, k, v)
+    return gpu
+
 
 class World:
     def __init__(self, args):
@@ -847,12 +1045,11 @@ class World:
         setp(ee, "volumetric_samples", 48)
         setp(ee, "use_volumetric_shadows", False)
         if self.engine == "CYCLES":
-            scene.cycles.samples = args.samples * 4
-            setp(scene.cycles, "use_denoising", False)
+            self.gpu = setup_cycles(scene, args.samples * 6)
 
         self.mats = {
-            "ground": mat_surface("ground", 0.85),
-            "bark": mat_surface("bark", 0.6),
+            "ground": mat_detailed("ground", "ground"),
+            "bark": mat_detailed("bark", "bark"),
             "rib": mat_surface("rib", 0.35, 0.6),
             "speck": mat_emissive("speck", 1.7),
             "band": mat_emissive("band", 1.5),
@@ -860,7 +1057,7 @@ class World:
             "fungus": mat_emissive("fungus", 1.25),
             "plant": mat_emissive("plant", 2.2),
             "orb": mat_emissive("orb", 3.2),
-            "rock": mat_surface("rock", 0.8),
+            "rock": mat_detailed("rock", "rock"),
         }
 
         # sun low and ahead-right: the sunset glow sits in the view
@@ -893,8 +1090,8 @@ class World:
         cd.clip_start = 0.1
         cd.clip_end = 900.0
         cd.dof.use_dof = True
-        cd.dof.focus_distance = 14.0
-        cd.dof.aperture_fstop = 5.6
+        cd.dof.focus_distance = 11.0
+        cd.dof.aperture_fstop = 3.2
         self.cam = bpy.data.objects.new("cam", cd)
         self.coll.objects.link(self.cam)
         scene.camera = self.cam
@@ -917,9 +1114,12 @@ class World:
                          int(math.floor((yc + VIEW) / TILE)) + 1))
         for idx in [i for i in self.tiles if i not in want]:
             for ob in self.tiles.pop(idx):
-                me = ob.data
+                data = ob.data
                 bpy.data.objects.remove(ob, do_unlink=True)
-                bpy.data.meshes.remove(me)
+                if isinstance(data, bpy.types.Mesh):
+                    bpy.data.meshes.remove(data)
+                elif isinstance(data, bpy.types.Light):
+                    bpy.data.lights.remove(data)
         for idx in sorted(want - set(self.tiles)):
             self.tiles[idx] = build_tile(idx, self.seed, self.track, self.mats, self.coll)
 

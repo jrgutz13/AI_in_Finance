@@ -57,14 +57,18 @@ if "%RES%"=="3" set "RESARG=--resolution 3840x2160"
 
 echo.
 echo Quality?
-echo   1  draft     (fastest - good for testing)
-echo   2  standard  (recommended)
-echo   3  high      (cleanest, slowest)
+echo   1  draft      (fastest - good for testing)
+echo   2  standard   (recommended)
+echo   3  high       (cleaner, slower)
+echo   4  photoreal  (Cycles path tracing: real light and glow spill,
+echo                  the most photographic look - but MANY times slower.
+echo                  Run test_world_speed.bat first to see how slow.)
 set "Q="
-set /p Q="Choose 1-3 [press Enter for 2]: "
+set /p Q="Choose 1-4 [press Enter for 2]: "
 set "QARG=--quality standard"
 if "%Q%"=="1" set "QARG=--quality draft"
 if "%Q%"=="3" set "QARG=--quality high"
+if "%Q%"=="4" set "QARG=--quality standard --engine cycles"
 
 REM pick the seed here so the preview and the video show the same world.
 REM The leading 1 matters: %RANDOM% can be 0, and a seed like "0123" would be
