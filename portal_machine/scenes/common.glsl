@@ -61,79 +61,7 @@ vec3 tonemap(vec3 c) {
     return 1.0 - exp(-c);
 }
 
-// ---------------------------------------------------------------------
-// 3D helpers, used by the raymarched scenes
-// ---------------------------------------------------------------------
-
-mat3 rotX(float a) {
-    float c = cos(a), s = sin(a);
-    return mat3(1, 0, 0, 0, c, -s, 0, s, c);
-}
-mat3 rotY(float a) {
-    float c = cos(a), s = sin(a);
-    return mat3(c, 0, s, 0, 1, 0, -s, 0, c);
-}
-mat3 rotZ(float a) {
-    float c = cos(a), s = sin(a);
-    return mat3(c, -s, 0, s, c, 0, 0, 0, 1);
-}
-
-// signed distance functions: negative inside, positive outside
-float sdSphere(vec3 p, float r) {
-    return length(p) - r;
-}
-float sdBox(vec3 p, vec3 b) {
-    vec3 q = abs(p) - b;
-    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
-}
-float sdTorus(vec3 p, vec2 t) {
-    return length(vec2(length(p.xz) - t.x, p.y)) - t.y;
-}
-float sdOctahedron(vec3 p, float s) {
-    p = abs(p);
-    return (p.x + p.y + p.z - s) * 0.57735027;
-}
-// infinite cross of square tubes — the piece cut out of a Menger sponge
-float sdCross(vec3 p, float s) {
-    float a = max(abs(p.x), abs(p.y));
-    float b = max(abs(p.y), abs(p.z));
-    float c = max(abs(p.z), abs(p.x));
-    return min(a, min(b, c)) - s;
-}
-
 // NOTE: never name a helper noise1/noise2/noise3/noise4 — those are built-in
 // GLSL function names. Redeclaring one with a different return type compiles
 // on some software renderers but fails on real GPU drivers with
 // "overloaded functions must have the same return type".
-
-// ---------------------------------------------------------------------
-// Periodic noise: repeats exactly every `per` lattice cells. Landscapes
-// built from this can wrap their world offset with no visible seam, which
-// is what lets a fly-through run for hours without drifting into float
-// precision loss.
-// ---------------------------------------------------------------------
-
-float phash(vec2 i, float per) {
-    return hash21(mod(i, vec2(per)));
-}
-
-float pnoise(vec2 p, float per) {
-    vec2 i = floor(p), f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(phash(i,               per), phash(i + vec2(1, 0), per), f.x),
-               mix(phash(i + vec2(0, 1), per), phash(i + vec2(1, 1), per), f.x), f.y);
-}
-
-// Octaves double in frequency AND in period, so the whole sum keeps the
-// base period. (No rotation between octaves — that would break periodicity.)
-float pfbm(vec2 p, float per, int octaves) {
-    float v = 0.0, a = 0.5, pe = per;
-    for (int i = 0; i < 8; i++) {
-        if (i >= octaves) break;
-        v += a * pnoise(p, pe);
-        p *= 2.0;
-        pe *= 2.0;
-        a *= 0.5;
-    }
-    return v;
-}

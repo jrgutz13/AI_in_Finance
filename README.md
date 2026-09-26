@@ -85,97 +85,15 @@ to force a single-style continuous render.
 | `vortex` | whirlpool of glowing filaments spiraling outward forever |
 | `galaxy_dive` | flying into a spiral galaxy: arms, dust lanes, star streams |
 | `ripple_dive` | soft luminous ripples gliding out of infinite depth |
-| `alien_world` | POV flight over a photoreal-style alien landscape with real atmosphere |
-
-### True 3D scenes (raymarched)
-
-These trace a ray per pixel through real 3D space, so they have genuine
-perspective, parallax, surface lighting, specular highlights and volumetric
-fog — the camera is physically flying through modeled geometry rather than
-through a flat pattern that imitates depth.
-
-| scene | look |
-| --- | --- |
-| `tunnel_3d` | panelled portal tunnel with lit rings receding into fog |
-| `mandelbulb_3d` | orbiting the classic 3D fractal as its surface morphs |
-| `menger_3d` | flying the corridors of an infinite Menger sponge |
-| `kaleido_3d` | mirrored 3D jewels receding with real depth |
-| `crystal_3d` | drifting through caves of glowing faceted crystal |
-| `wormhole_3d` | organic ridged tube threaded with bioluminescent veins |
-
-**They cost roughly 3–10x more per frame than the flat scenes.** Render them
-at 1080p (or 1440p) rather than 4K: a 3-hour 1080p 3D video is an overnight
-job, while 4K could take days. Everything else — continuous evolution,
-crash-safe parts, resume, bitrate caps — works exactly the same.
 
 All traveling scenes fly FORWARD (into the screen / toward the viewer), and
-the infinite-zoom and 3D scenes use periodic/bounded math, so they can run
+the infinite-zoom scenes use periodic/bounded math, so they can run
 for hours without ever repeating or degrading.
 
 Adding a scene = dropping a new `.glsl` file in `portal_machine/scenes/` and
 registering it (with the ranges its random parameters are drawn from) in
 `portal_machine/scenes/__init__.py`. Helpers (`pal`, `fbm`, `rot`, …) come
 from `common.glsl`; four generic uniforms `u_p1..u_p4` carry the randomness.
-
-## Blender Worlds (photoreal-style landscapes)
-
-A second generator, separate from the shader modes: an endless POV glide
-along a water channel through a bioluminescent alien world — glowing
-"supertree" groves with fairy-light canopies and spiral light bands, ground
-carpeted in glowing specks, neon fungi and tendril plants, reflective water
-with drifting bioluminescent patches, a dramatic sky with lit clouds and
-stars, and low haze. The world drifts continuously between four biomes
-(sunset shores, blue night, magenta dream, pink dusk) with no cuts.
-
-**Needs Blender** (free): install **Blender 4.5 LTS** from
-https://www.blender.org/download/lts/ . Tested on Blender 4.0, 4.5 LTS
-and 5.0.
-
-- **Windows:** double-click **`make_world.bat`**. It can render a preview
-  picture of the world first, so you can check the look before committing
-  to a long render.
-- **Command line:** `python blender_worlds/make_world.py --duration 3h
-  --audio music.mp3` (`--preview 45` renders a single still instead).
-
-These are genuinely 3D scenes rendered by Blender's EEVEE engine, so they
-are **much slower than the shader modes**. Double-click
-**`test_world_speed.bat`** first (or `--speed-test`): it renders a few real
-frames on your machine and tells you how long 10-minute, 1-hour and 3-hour
-videos would take. `--quality draft`
-is fastest; `--speed-scale 0.5` slows the camera.
-
-Worlds render in 60-second crash-safe chunks: after a power cut, run
-`make_world.bat` again (or `--resume`) and it continues from the last frame
-on disk. Bloom glow is added when each chunk is encoded.
-
-## Fractal Worlds (Mandelbulber2 fractal landscapes)
-
-An endless, collision-free flight over a fractal alien landscape — misty
-fields of spires under skies that drift through moods (golden hour, magenta
-dusk, teal dawn, violet noon, ember) while the sun slowly circles.
-
-**Needs Mandelbulber2** (free, open source):
-https://github.com/buddhi1980/mandelbulber2/releases — extract it anywhere.
-
-- **Windows:** double-click **`make_fractal.bat`** (it asks where
-  mandelbulber2.exe is the first time, and remembers). It can show a preview
-  picture of the journey before committing to a long render.
-- **Speed:** double-click **`test_fractal_speed.bat`** first. Mandelbulber is
-  slow on a CPU; it uses your graphics card automatically (OpenCL) when it
-  can, which is typically many times faster.
-- **Command line:** `python fractal_worlds/make_fractal.py --duration 3h --audio music.mp3`
-
-How it avoids crashing into the scenery: before rendering, it measures the
-ground height every half rock-width along the planned route (Mandelbulber
-reports no distances, so this uses two renders with different fog colors —
-the surface color cancels out, leaving the distance), then plans an altitude
-that always clears the terrain and climbs smoothly before spires. The route
-never repeats and never leaves the landscape; the view stays level like a
-stabilized drone.
-
-Crash-safe like the other tools (`--resume`). Each video writes a
-`_credits.txt`: the landscape comes from a Mandelbulber2 example scene, so
-paste that credit line into your video description.
 
 ## Clip Stitcher (long videos from short clips and images)
 

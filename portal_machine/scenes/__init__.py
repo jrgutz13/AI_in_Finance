@@ -223,69 +223,6 @@ SCENES = {
             locked=("p1", "p3", "p4"),  # arms (int), speed (time), density (re-seeds)
         ),
         SceneDef(
-            "alien_world", "Alien World Flyover",
-            speed=(0.5, 0.9),
-            p1=(0.25, 0.85),       # terrain roughness
-            p2=(55.0, 110.0),      # hill height
-            p3=(0.7, 1.2),         # fly speed
-            p4=(0.0, 1.0),         # alien color shift
-            locked=("p2", "p3"),   # height (terrain shape), speed (scales time)
-        ),
-        SceneDef(
-            "mandelbulb_3d", "3D Mandelbulb",
-            speed=(0.6, 1.0),
-            p1=(6.0, 9.0),         # fractal power
-            p2=(0.2, 0.8),         # orbit tilt
-            p3=(0.7, 1.3),         # orbit speed
-            p4=(0.5, 1.4),         # glow
-            locked=("p3",),        # orbit speed (scales time)
-        ),
-        SceneDef(
-            "menger_3d", "3D Menger Corridors",
-            speed=(0.6, 1.1),
-            p1=(0.9, 1.35),        # hole size
-            p2=(0.0, 1.6),         # lattice twist
-            p3=(0.7, 1.3),         # fly speed
-            p4=(0.5, 1.4),         # glow
-            locked=("p3",),        # fly speed (scales time)
-        ),
-        SceneDef(
-            "kaleido_3d", "3D Kaleidoscope",
-            speed=(0.6, 1.1),
-            p2=(0.4, 1.6),         # fold tightness
-            p3=(0.7, 1.3),         # fly speed
-            p4=(0.5, 1.4),         # glow
-            choices={"p1": [5, 6, 7, 8, 10]},  # mirror wedges
-            locked=("p1", "p3"),   # wedges (integer), fly speed (scales time)
-        ),
-        SceneDef(
-            "crystal_3d", "3D Crystal Caves",
-            speed=(0.6, 1.1),
-            p1=(0.55, 0.95),       # crystal size
-            p2=(0.6, 1.6),         # cluster spread
-            p3=(0.7, 1.3),         # drift speed
-            p4=(0.5, 1.3),         # inner glow
-            locked=("p3",),        # drift speed (scales time)
-        ),
-        SceneDef(
-            "wormhole_3d", "3D Wormhole",
-            speed=(0.6, 1.1),
-            p1=(0.85, 1.25),       # tube radius
-            p2=(0.5, 1.5),         # wall ripple
-            p3=(0.7, 1.3),         # fly speed
-            p4=(0.5, 1.4),         # energy glow
-            locked=("p3",),        # fly speed (scales time)
-        ),
-        SceneDef(
-            "tunnel_3d", "3D Portal Tunnel (raymarched)",
-            speed=(0.7, 1.2),
-            p1=(0.85, 1.25),       # tunnel radius
-            p2=(0.15, 0.55),       # path wobble
-            p3=(0.7, 1.3),         # fly speed
-            p4=(0.6, 1.6),         # glow amount
-            locked=("p3",),        # fly speed (scales time)
-        ),
-        SceneDef(
             "ripple_dive", "Ripple Dive",
             speed=(0.6, 1.1),
             p1=(2.5, 5.0),         # ripple frequency
