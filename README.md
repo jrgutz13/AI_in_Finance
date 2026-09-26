@@ -95,6 +95,11 @@ registering it (with the ranges its random parameters are drawn from) in
 `portal_machine/scenes/__init__.py`. Helpers (`pal`, `fbm`, `rot`, …) come
 from `common.glsl`; four generic uniforms `u_p1..u_p4` carry the randomness.
 
+## Weekly 3D videos (Blender)
+
+Custom 3D videos made one per week live in `weekly/` — each week's folder has a
+`render.bat` for the full video and a `speed_test.bat`. See `weekly/README.md`.
+
 ## Clip Stitcher (long videos from short clips and images)
 
 AI video generators make clips of 5-20 seconds. The stitcher turns a
