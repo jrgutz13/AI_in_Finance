@@ -20,10 +20,12 @@ One custom 3D video per week, each in its own folder:
      again and answer **Y** to finish the interrupted render.
    - Everything is **photoreal** (Cycles path tracing on the graphics card:
      real refraction, glowing things light their surroundings).
-   - **Seamless loop:** only a 20-minute loop is rendered and it is repeated
-     to fill the 3 hours (9 times), so the render takes a ninth of the time.
-     The world is built to come back exactly to its starting state after
-     one loop, so the joins are invisible — no fade, no cut.
+   - **Seamless loop:** only a 10-minute loop is rendered and it is repeated
+     to fill the 3 hours (18 times), so the render takes a fraction of the
+     time. The world is built to come back exactly to its starting state
+     after one loop, so the joins are invisible — no fade, no cut.
+   - Step-by-step instructions for each week are in its folder
+     (e.g. `2026-09-26_kaleidoscope/HOW_TO_MAKE_THE_VIDEO.txt`).
 3. The approved sample is literally a 10-second excerpt of the final video
    (the launcher uses the same seed), so the full render looks exactly like
    what you approved.

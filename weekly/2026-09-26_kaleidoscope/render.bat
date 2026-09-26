@@ -45,16 +45,17 @@ if "%RES%"=="3" set "RESARG=--resolution 3840x2160"
 
 echo.
 set "LOOP="
-set /p LOOP="Seamless loop length - only this much is rendered, then repeated [press Enter for 20m]: "
-if "%LOOP%"=="" set LOOP=20m
-set "ENGARG=--engine cycles --loop %LOOP%"
+set /p LOOP="Seamless loop length - only this much is rendered, then repeated [press Enter for 10m]: "
+if "%LOOP%"=="" set LOOP=10m
+REM the approved look: photoreal gems, gold and stone, neon colors, strong glow
+set "ENGARG=--engine cycles --style real --glow strong --loop %LOOP%"
 
 echo.
 set "MUSIC="
 set /p MUSIC="Music file to loop underneath (drag the file here, or Enter for silent): "
 if defined MUSIC set "MUSIC=%MUSIC:"=%"
 
-REM seed 1 = the same kaleidoscope journey as the approved 10-second sample
+REM seed 1 = the same kaleidoscope journey as the approved samples
 if "%MUSIC%"=="" goto :silent
 %PY% %DRIVER% --scene %SCENE% --seed 1 --fps 24 --duration %DUR% %RESARG% %ENGARG% --audio "%MUSIC%"
 goto :finished

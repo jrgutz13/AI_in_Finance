@@ -1,0 +1,98 @@
+HOW TO MAKE THE 3-HOUR KALEIDOSCOPE VIDEO
+==========================================
+
+What you get: a 3-hour 1080p video of the photoreal neon kaleidoscope you
+approved (real glass gems, gold, stone, strong glow, drifting camera,
+glowing mist). Only a 10-minute seamless loop is rendered; it is played 18
+times to make 3 hours, with no visible join.
+
+
+ONE-TIME SETUP
+--------------
+
+1. Unzip PortalMachine.zip somewhere with plenty of free space, for example
+   your Documents folder. If you have an older PortalMachine folder, you can
+   delete it first (keep anything you want from its "output" folder).
+
+2. Double-click setup.bat in the PortalMachine folder (quick if Python and
+   the other tools are already installed from before).
+
+3. Install Blender 4.5 LTS (free) from https://www.blender.org/download/lts/
+   Use the normal Windows installer (.msi) and its default install location,
+   so PortalMachine can find it automatically.
+
+4. Update your NVIDIA graphics driver (GeForce Experience / NVIDIA App, or
+   https://www.nvidia.com/drivers). Blender needs a recent driver to use your
+   RTX 3060's ray-tracing cores (OptiX).
+
+
+BEFORE A LONG RENDER: SPEED TEST (a few minutes)
+------------------------------------------------
+
+5. Open the folder  PortalMachine\weekly\2026-09-26_kaleidoscope
+   and double-click  speed_test.bat
+
+   - The first line must say "on the graphics card (OPTIX)". If it says
+     "on the CPU", Blender did not find the graphics card: update the driver
+     (step 4) and try again.
+   - The "10-minute" line is how long the whole 3-hour video will take.
+
+
+PREPARE THE LAPTOP
+------------------
+
+6. Plug in the charger. Rendering at full power for days on battery is not
+   possible.
+
+7. Stop Windows from sleeping: Settings > System > Power & battery >
+   Screen and sleep > set "When plugged in, put my device to sleep after"
+   to Never. (The screen may turn off; that is fine.)
+
+8. Keep the laptop on a hard surface with the vents clear; it will run hot
+   for a long time. A laptop cooling pad helps.
+
+9. Free disk space needed: about 15 GB (the finished video is up to about
+   13.5 GB, plus working space).
+
+
+RENDER THE VIDEO
+----------------
+
+10. In the same folder, double-click  render.bat  and answer:
+
+      Video length ....................... press Enter  (3 hours)
+      Resolution ......................... press Enter  (1080p)
+      Seamless loop length ............... press Enter  (10 minutes)
+      Music file ......................... drag your music file into the
+                                           window and press Enter, or just
+                                           press Enter for no sound
+
+    The music plays continuously underneath (it repeats if it is shorter
+    than 3 hours).
+
+11. Leave it running. The window shows progress and a time estimate (ETA).
+    You can keep using the computer lightly, but it will be slow.
+
+12. When it finishes, the output folder opens by itself. Your video is:
+
+      PortalMachine\output\kaleidoscope_1.mp4
+
+
+IF IT GETS INTERRUPTED (power cut, crash, restart, window closed)
+-----------------------------------------------------------------
+
+Nothing finished is lost; work is saved every minute of video.
+Just double-click render.bat again. It asks:
+
+      Finish this interrupted render? [Y/n]
+
+Press Enter (or Y) and it continues where it stopped.
+
+
+GOOD TO KNOW
+------------
+
+- 4K is available in the resolution menu, but takes about 4 times longer.
+- The 10-second samples you approved are part of this exact video (same
+  seed), so the full render looks like what you saw, but sharper (1080p,
+  more samples).
