@@ -76,12 +76,15 @@ def glow_filter(height, out_fmt="yuv420p"):
     are blurred and screened back on (a tight halo and a wide one). Done in
     ffmpeg, identical on every Blender version."""
     s1 = max(1.0, height / 200.0)
-    s2 = max(2.0, height / 50.0)
-    return (f"[0:v]format=gbrp,split=3[a][b][c];"
-            f"[b]curves=all='0/0 0.60/0 1/1',gblur=sigma={s1:.2f}[g1];"
-            f"[c]curves=all='0/0 0.50/0 1/1',gblur=sigma={s2:.2f}[g2];"
-            f"[a][g1]blend=all_mode=screen:all_opacity=0.75[t];"
-            f"[t][g2]blend=all_mode=screen:all_opacity=0.40,"
+    s2 = max(2.0, height / 55.0)
+    s3 = max(4.0, height / 16.0)
+    return (f"[0:v]format=gbrp,split=4[a][b][c][d];"
+            f"[b]curves=all='0/0 0.50/0 1/1',gblur=sigma={s1:.2f}[g1];"
+            f"[c]curves=all='0/0 0.40/0 1/1',gblur=sigma={s2:.2f}[g2];"
+            f"[d]curves=all='0/0 0.45/0 1/0.8',gblur=sigma={s3:.2f}[g3];"
+            f"[a][g1]blend=all_mode=screen:all_opacity=0.9[t];"
+            f"[t][g2]blend=all_mode=screen:all_opacity=0.6[u];"
+            f"[u][g3]blend=all_mode=screen:all_opacity=0.35,"
             f"vignette=angle=PI/5,format={out_fmt}[out]")
 
 
@@ -91,11 +94,27 @@ def auto_maxrate_mbps(w, h, fps):
 
 # ---------------------------------------------------------------------------
 
+_SHOWN = []      # the device line is printed once per run, not once per chunk
+
+
+def device_note(line):
+    """Turn the scene's 'BLENDER 4.5.3 ENGINE OPTIX' line into plain words."""
+    parts = line.split()
+    dev = parts[-1] if len(parts) >= 4 else "?"
+    if dev in ("OPTIX", "CUDA", "HIP", "ONEAPI", "METAL"):
+        return f"Blender {parts[1]}: photoreal (Cycles) on the graphics card ({dev})"
+    if dev == "CPU":
+        return (f"Blender {parts[1]}: photoreal (Cycles) on the CPU - no supported graphics "
+                "card found, this will be very slow. Update the NVIDIA driver, then in "
+                "Blender: Edit > Preferences > System > Cycles Render Devices > OptiX.")
+    return f"Blender {parts[1]}: standard look (EEVEE) on the graphics card"
+
+
 def blender_args(s, extra):
     return ([s["blender"], "-b", "--factory-startup", "-P", s["scene"], "--",
              "--seed", str(s["seed"]), "--width", str(s["width"]),
              "--height", str(s["height"]), "--fps", str(s["fps"]),
-             "--samples", str(s["samples"])] + extra)
+             "--samples", str(s["samples"]), "--engine", s.get("engine", "eevee")] + extra)
 
 
 def run_blender(s, first, last, frames_dir, progress):
@@ -108,6 +127,9 @@ def run_blender(s, first, last, frames_dir, progress):
         if line.startswith("FRAME "):
             parts = line.split()
             progress(int(parts[1]), float(parts[2]))
+        elif line.startswith("BLENDER ") and not _SHOWN:
+            _SHOWN.append(line)
+            print(f"  {device_note(line)}")
         else:
             tail = (tail + [line.rstrip()])[-25:]
     if proc.wait() != 0:
@@ -215,7 +237,9 @@ def speed_test(s, frames=6):
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                             errors="replace")
     for line in proc.stdout:
-        if line.startswith("FRAME "):
+        if line.startswith("BLENDER "):
+            print(f"  {device_note(line)}")
+        elif line.startswith("FRAME "):
             times.append(float(line.split()[2]))
             sys.stdout.write(f"\r  test frame {len(times)}/{frames + 2}: {times[-1]:.2f} s   ")
             sys.stdout.flush()
@@ -238,7 +262,10 @@ def main(argv=None):
     ap.add_argument("--duration", type=parse_duration, default=parse_duration("3h"))
     ap.add_argument("--resolution", default="1920x1080")
     ap.add_argument("--fps", type=int, default=24)
-    ap.add_argument("--samples", type=int, default=16)
+    ap.add_argument("--engine", choices=["cycles", "eevee"], default="eevee",
+                    help="eevee = standard look; cycles = photoreal path tracing (much slower)")
+    ap.add_argument("--samples", type=int, default=None,
+                    help="default: 48 for cycles (denoised), 16 for eevee")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--start-at", type=float, default=0.0, metavar="SEC")
     ap.add_argument("--audio", default=None)
@@ -286,14 +313,16 @@ def main(argv=None):
     out = args.out or os.path.join("output", f"{name}_{seed}.mp4")
     s = {"scene": os.path.abspath(args.scene), "blender": blender, "seed": seed,
          "duration": args.duration, "width": w, "height": h, "fps": args.fps,
-         "samples": args.samples, "chunk": args.chunk, "crf": args.crf,
+         "engine": args.engine,
+         "samples": args.samples or (48 if args.engine == "cycles" else 16),
+         "chunk": args.chunk, "crf": args.crf,
          "start_frame": int(round(args.start_at * args.fps)),
          "maxrate": auto_maxrate_mbps(w, h, args.fps),
          "audio": os.path.abspath(args.audio) if args.audio else None,
          "out": out, "parts_dir": out.rsplit(".", 1)[0] + "_parts"}
 
     if args.speed_test:
-        print(f"Speed test: {w}x{h} @ {args.fps} fps  (Blender: {blender})")
+        print(f"Speed test: {w}x{h} @ {args.fps} fps, {args.engine}  (Blender: {blender})")
         return speed_test(s)
     if args.preview is not None:
         png = out.rsplit(".", 1)[0] + f"_t{args.preview:.0f}.png"
@@ -310,6 +339,7 @@ def main(argv=None):
     tmp = args.chunk * args.fps * w * h * 0.3 / 1e9
     free = shutil.disk_usage(os.path.abspath("output")).free / 1e9
     print(f"video      {name}, {w}x{h} @ {args.fps} fps, {fmt_ts(args.duration)}, seed {seed}")
+    print(f"look       {args.engine} ({s['samples']} samples)")
     print(f"blender    {blender}")
     print(f"output     {out}")
     print(f"size       up to ~{worst:.1f} GB (+{tmp:.1f} GB working space); free {free:.0f} GB")

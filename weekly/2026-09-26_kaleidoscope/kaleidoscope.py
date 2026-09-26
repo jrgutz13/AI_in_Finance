@@ -16,8 +16,15 @@ perfect sync, so the pattern keeps rearranging itself. New rings arrive with
 different symmetry (6/8/10/12-fold) and colors drift through curated
 palettes, so the view never settles into a loop.
 
-Deep blacks: the world is pure black and every material fades to black with
-distance from the camera, so rings are born invisibly in the dark far ahead.
+The tunnel is lined like a split geode: near-black polished stone veined
+with faint agate bands, covered in clusters of pointed crystals that catch
+the light. It fills the frame with detail while the stone keeps the blacks
+deep. Every material fades to black with distance from the camera, so rings
+are born invisibly in the dark far ahead.
+
+Two looks from the same scene: --engine cycles (photoreal: the gems are real
+refracting glass with light inside, and every glowing filament lights its
+surroundings) and --engine eevee (several times faster).
 
 Seamless: everything is a pure function of (seed, time). Rings are built as
 they come into view and deleted behind the camera, so memory stays flat and
@@ -32,12 +39,14 @@ import time
 
 import bpy
 import numpy as np
+from mathutils import Vector
 
 TAU = 2.0 * math.pi
 SEG = 1.6            # distance between rings (Blender units)
 RADIUS = 3.0         # tunnel radius
-VIEW = 34.0          # rings exist this far ahead (they are pitch black by then)
-FADE_NEAR, FADE_FAR = 6.0, 24.0   # full brightness -> black
+VIEW = 42.0          # rings exist this far ahead (they are pitch black by then)
+FADE_NEAR, FADE_FAR = 7.0, 36.0   # full brightness -> black
+WALL_R = 3.55        # the geode wall: dark glossy stone lined with crystals
 LENS_FADE = (0.15, 0.8)           # objects this close to the lens fade out
 SPEED = 0.95         # camera travel per second: a slow glide
 
@@ -200,6 +209,65 @@ def tube(points, radius, sides=6):
     return v.reshape(-1, 3), faces
 
 
+def crystal_cluster(rng, wedge, count):
+    """Geode lining for one wedge: clusters of pointed hexagonal crystals
+    growing from the wall towards the axis, fanning out from each cluster's
+    root like amethyst in a split geode. Returns verts, faces, and the
+    crystal index of each face (to split them into color groups)."""
+    verts, faces, owner = [], [], []
+    roots = [(rng.uniform(0.05, 0.95) * wedge, rng.uniform(-0.5, 0.5) * SEG)
+             for _ in range(int(rng.integers(3, 6)))]
+    ang6 = TAU * np.arange(6) / 6
+    for i in range(count):
+        th_c, y_c = roots[int(rng.integers(len(roots)))]
+        th = float(np.clip(th_c + rng.normal(0, 0.1) * wedge, 0.02 * wedge, 0.98 * wedge))
+        yy = y_c + rng.normal(0, 0.13) * SEG
+        radial = np.array([math.cos(th), 0.0, math.sin(th)])
+        side = np.array([-math.sin(th), 0.0, math.cos(th)])
+        base = radial * (WALL_R + 0.08) + np.array([0.0, yy, 0.0])
+        # point inwards, splayed away from the cluster root
+        spread = np.array([0.0, yy - y_c, 0.0]) + side * (th - th_c) * WALL_R
+        d = -radial + 0.9 * spread + rng.normal(0, 0.18, 3)
+        d /= np.linalg.norm(d)
+        length = rng.uniform(0.18, 0.4) if rng.random() < 0.8 else rng.uniform(0.45, 0.75)
+        width = length * rng.uniform(0.13, 0.22)
+        a = np.cross(d, [0.0, 1.0, 0.0] if abs(d[1]) < 0.9 else [1.0, 0.0, 0.0])
+        a /= np.linalg.norm(a)
+        b = np.cross(d, a)
+        tw = rng.uniform(0, TAU)
+        ring = [np.cos(q + tw) * a + np.sin(q + tw) * b for q in ang6]
+        v0 = len(verts)
+        verts += [base + width * r for r in ring]                         # 0-5 root
+        verts += [base + d * length * 0.72 + width * r for r in ring]     # 6-11 shoulder
+        verts.append(base + d * length)                                   # 12 tip
+        for s in range(6):
+            t = (s + 1) % 6
+            faces.append((v0 + s, v0 + t, v0 + 6 + t, v0 + 6 + s))
+            faces.append((v0 + 6 + s, v0 + 6 + t, v0 + 12))
+            owner += [i, i]
+    return verts, faces, owner
+
+
+def wall_tube(y0, y1, journey, sides=128, rows=4):
+    """One section of the stone wall around the tunnel, vertex-colored from
+    the journey palette at each vertex's depth so sections join without a
+    seam. Faces point inwards."""
+    verts, cols, faces = [], [], []
+    for j in range(rows + 1):
+        y = y0 + (y1 - y0) * j / rows
+        colors, _ = journey.at(y)
+        c = colors[0] * 0.6 + colors[1] * 0.4
+        for s in range(sides):
+            ph = TAU * s / sides
+            verts.append((WALL_R * math.cos(ph), y, WALL_R * math.sin(ph)))
+            cols.append(c)
+    for j in range(rows):
+        for s in range(sides):
+            a, b = j * sides + s, j * sides + (s + 1) % sides
+            faces.append((a, b, b + sides, a + sides))
+    return verts, faces, cols
+
+
 def uv_sphere(center, r, rows=6, sides=8):
     verts, faces = [], []
     for i in range(1, rows):
@@ -238,7 +306,7 @@ def _fade_factor(nt):
     nt.links.new(cam.outputs["View Distance"], mr.inputs["Value"])
     sq = nt.nodes.new("ShaderNodeMath")          # ease out: stays bright, then drops
     sq.operation = "POWER"
-    sq.inputs[1].default_value = 2.0
+    sq.inputs[1].default_value = 1.6
     nt.links.new(mr.outputs["Result"], sq.inputs[0])
     # and fade out anything brushing past the lens: huge out-of-focus blobs
     # at the frame edges would drown the pattern
@@ -278,8 +346,8 @@ def _vmul(nt, color, factor):
     return m.outputs["Vector"]
 
 
-def mat_jewel():
-    m = bpy.data.materials.new("jewel")
+def mat_jewel(name="jewel", glow_amount=1.2):
+    m = bpy.data.materials.new(name)
     m.use_nodes = True
     nt = m.node_tree
     bs = nt.nodes["Principled BSDF"]
@@ -298,7 +366,7 @@ def mat_jewel():
     # angles (Fresnel), so the jewels read even where nothing lights them
     fres = nt.nodes.new("ShaderNodeLayerWeight")
     fres.inputs["Blend"].default_value = 0.35
-    glow = _mul(nt, _mul(nt, fres.outputs["Facing"], fade), 1.2)
+    glow = _mul(nt, _mul(nt, fres.outputs["Facing"], fade), glow_amount)
     ec = sock(bs, "Emission Color", "Emission")
     nt.links.new(info.outputs["Color"], ec)
     nt.links.new(glow, sock(bs, "Emission Strength"))
@@ -324,6 +392,127 @@ def mat_glow(name, strength):
 # ---------------------------------------------------------------------------
 # rings
 # ---------------------------------------------------------------------------
+
+def setup_cycles(scene, samples):
+    """Cycles: physically simulated light — true refraction through the gems,
+    glowing things that really light their surroundings. Uses the GPU when
+    one is found (NVIDIA OptiX first — an RTX card's ray-tracing cores) and
+    removes noise with OpenImageDenoise when the build has it."""
+    scene.render.engine = "CYCLES"
+    cy = scene.cycles
+    gpu = None
+    try:
+        prefs = bpy.context.preferences.addons["cycles"].preferences
+        for dt in ("OPTIX", "CUDA", "HIP", "ONEAPI", "METAL"):
+            try:
+                prefs.compute_device_type = dt
+            except TypeError:
+                continue
+            for refresh in ("refresh_devices", "get_devices"):
+                if hasattr(prefs, refresh):
+                    getattr(prefs, refresh)()
+                    break
+            if [d for d in prefs.devices if d.type == dt]:
+                for d in prefs.devices:
+                    d.use = d.type == dt
+                gpu = dt
+                break
+    except (KeyError, AttributeError):
+        pass
+    cy.device = "GPU" if gpu else "CPU"
+    cy.samples = samples
+    setp(cy, "use_adaptive_sampling", True)
+    setp(cy, "adaptive_threshold", 0.02)
+    try:
+        import _cycles
+        has_oidn = bool(getattr(_cycles, "with_openimagedenoise", False))
+    except ImportError:
+        has_oidn = False
+    setp(cy, "use_denoising", has_oidn)
+    if has_oidn:
+        setp(cy, "denoiser", "OPENIMAGEDENOISE")
+        setp(cy, "denoising_use_gpu", bool(gpu))
+    # glass needs transmission bounces; caustics off (noise), glossy filter
+    # and indirect clamp tame the fireflies thousands of tiny emitters cause
+    for k, v in (("max_bounces", 12), ("diffuse_bounces", 2), ("glossy_bounces", 4),
+                 ("transmission_bounces", 8), ("transparent_max_bounces", 8),
+                 ("volume_bounces", 0), ("caustics_reflective", False),
+                 ("caustics_refractive", False), ("blur_glossy", 0.6),
+                 ("sample_clamp_indirect", 6.0), ("sample_clamp_direct", 0.0)):
+        setp(cy, k, v)
+    return gpu or "CPU"
+
+
+def mat_wall():
+    """The geode's stone wall: near-black polished stone that mirrors all the
+    glow in the tunnel, veined with faint agate bands in the palette colors.
+    The bands use world coordinates so neighbouring wall sections match."""
+    m = bpy.data.materials.new("wall")
+    m.use_nodes = True
+    nt = m.node_tree
+    bs = nt.nodes["Principled BSDF"]
+    attr = nt.nodes.new("ShaderNodeAttribute")
+    attr.attribute_name = "col"
+    fade = _fade_factor(nt)
+    nt.links.new(_vmul(nt, attr.outputs["Color"], 0.05), bs.inputs["Base Color"])
+    bs.inputs["Roughness"].default_value = 0.14
+    bs.inputs["Metallic"].default_value = 0.2
+    setp(sock(bs, "Coat Weight", "Clearcoat"), "default_value", 1.0)
+    setp(sock(bs, "Coat Roughness", "Clearcoat Roughness"), "default_value", 0.03)
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    wave = nt.nodes.new("ShaderNodeTexWave")
+    setp(wave, "wave_type", "BANDS")
+    setp(wave, "bands_direction", "DIAGONAL")
+    wave.inputs["Scale"].default_value = 0.9
+    wave.inputs["Distortion"].default_value = 7.0
+    wave.inputs["Detail"].default_value = 4.0
+    setp(sock(wave, "Detail Scale"), "default_value", 1.2)
+    nt.links.new(geo.outputs["Position"], wave.inputs["Vector"])
+    ramp = nt.nodes.new("ShaderNodeValToRGB")          # thin bright bands
+    ramp.color_ramp.elements[0].position = 0.72
+    ramp.color_ramp.elements[0].color = (0, 0, 0, 1)
+    ramp.color_ramp.elements[1].position = 1.0
+    ramp.color_ramp.elements[1].color = (1, 1, 1, 1)
+    nt.links.new(wave.outputs["Fac"], ramp.inputs["Fac"])
+    noise = nt.nodes.new("ShaderNodeTexNoise")         # mottled dim glow between bands
+    noise.inputs["Scale"].default_value = 1.8
+    nt.links.new(geo.outputs["Position"], noise.inputs["Vector"])
+    mix = nt.nodes.new("ShaderNodeMath")
+    mix.operation = "MULTIPLY_ADD"
+    nt.links.new(noise.outputs["Fac"], mix.inputs[0])
+    mix.inputs[1].default_value = 0.025
+    nt.links.new(ramp.outputs["Color"], mix.inputs[2])
+    nt.links.new(attr.outputs["Color"], sock(bs, "Emission Color", "Emission"))
+    nt.links.new(_mul(nt, _mul(nt, mix.outputs["Value"], fade), 0.55),
+                 sock(bs, "Emission Strength"))
+    return m
+
+
+def mat_jewel_glass(name="jewel_glass", ior=2.2, glow_amount=3.0):
+    """A real cut gem: colored glass that refracts (IOR 2.2, between sapphire
+    and diamond), an iridescent thin film where Blender supports it, and a
+    soft glow held inside the stone that shines out through the facets."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bs = nt.nodes["Principled BSDF"]
+    info = nt.nodes.new("ShaderNodeObjectInfo")
+    fade = _fade_factor(nt)
+    nt.links.new(_vmul(nt, info.outputs["Color"], fade), bs.inputs["Base Color"])
+    bs.inputs["Roughness"].default_value = 0.0
+    bs.inputs["Metallic"].default_value = 0.0
+    setp(sock(bs, "IOR"), "default_value", ior)
+    setp(sock(bs, "Transmission Weight", "Transmission"), "default_value", 1.0)
+    setp(sock(bs, "Thin Film Thickness"), "default_value", 320.0)   # faint iridescence
+    setp(sock(bs, "Thin Film IOR"), "default_value", 1.45)
+    # inner glow: emission inside the volume of the stone
+    out = nt.nodes["Material Output"]
+    vem = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(info.outputs["Color"], vem.inputs["Color"])
+    nt.links.new(_mul(nt, fade, glow_amount), vem.inputs["Strength"])
+    nt.links.new(vem.outputs["Emission"], out.inputs["Volume"])
+    return m
+
 
 class Ring:
     """One kaleidoscopic ring: a wedge of content, copied 2N times around the
@@ -399,6 +588,23 @@ class Ring:
             self.meshes.append(me)
             pieces.append((me, world.mats["bead"], bead_col, (0, 0, 0), 1.0, None))
 
+        # geode crystals lining the wall, in three color groups (the ring's
+        # own rng stream is untouched above, so jewels match earlier samples)
+        crng = rng_for(seed, 700002, k)
+        cv, cf, owner = crystal_cluster(crng, wedge, int(36 * 8 / n) + 12)
+        grp = crng.choice(3, size=max(owner) + 1, p=[0.5, 0.3, 0.2])
+        for g in range(3):
+            fs = [f for f, o in zip(cf, owner) if grp[o] == g]
+            if not fs:
+                continue
+            used = sorted({i for f in fs for i in f})
+            remap = {old: new for new, old in enumerate(used)}
+            me = make_mesh(f"cry{k}_{g}", [cv[i] for i in used],
+                           [tuple(remap[i] for i in f) for f in fs])
+            self.meshes.append(me)
+            col = colors[(g + k // 7) % 3] * (0.45 if g == 0 else 0.7)
+            pieces.append((me, world.mats["crystal"], col, (0, 0, 0), 1.0, None))
+
         # --- replicate the wedge 2n times: rotate, and mirror every other copy
         for c in range(2 * n):
             w = bpy.data.objects.new(f"w{k}_{c}", None)
@@ -436,6 +642,18 @@ class Ring:
             world.coll.objects.link(ob)
             self.objects.append(ob)
 
+        # this ring's section of the stone wall (does not turn with the ring)
+        v, fc, cols = wall_tube(y - SEG / 2, y + SEG / 2, world.journey)
+        me = make_mesh(f"wall{k}", v, fc, smooth=True)
+        ca = me.color_attributes.new("col", "FLOAT_COLOR", "POINT")
+        ca.data.foreach_set("color", np.concatenate(
+            [np.append(c, 1.0) for c in cols]).astype(np.float32))
+        me.materials.append(world.mats["wall"])
+        self.meshes.append(me)
+        ob = bpy.data.objects.new(f"wall{k}", me)
+        world.coll.objects.link(ob)
+        self.objects.append(ob)
+
     def update(self, t):
         self.root.rotation_euler = (0.0, self.phase + self.dir * self.turn_rate * t, 0.0)
         for ob, (axis, rate, ph) in self.spinners:
@@ -464,7 +682,8 @@ class World:
         self.coll = scene.collection
         self.rings = {}
 
-        self.engine = set_eevee(scene)
+        self.photoreal = args.engine == "cycles"
+        self.engine = setup_cycles(scene, args.samples) if self.photoreal else set_eevee(scene)
         r = scene.render
         r.resolution_x, r.resolution_y = args.width, args.height
         r.resolution_percentage = 100
@@ -494,9 +713,14 @@ class World:
         bg.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
         bg.inputs["Strength"].default_value = 0.0
 
-        self.mats = {"jewel": mat_jewel(),
-                     "filament": mat_glow("filament", 7.0),
-                     "bead": mat_glow("bead", 14.0)}
+        self.mats = {"jewel": mat_jewel_glass() if self.photoreal else mat_jewel(),
+                     "crystal": (mat_jewel_glass("crystal", 1.55, 0.8) if self.photoreal
+                                 else mat_jewel("crystal", 0.6)),
+                     "wall": mat_wall(),
+                     # bright enough to light the scene, not so bright they
+                     # clip to white: the glow pass adds the halo
+                     "filament": mat_glow("filament", 3.5),
+                     "bead": mat_glow("bead", 7.0)}
 
         # A ring of small, bright lights travelling with the camera. In a black
         # world the jewels can only reflect lights, and small bright ones give
@@ -504,8 +728,16 @@ class World:
         self.lights = []
         for i in range(6):
             a = TAU * (i + 0.5) / 6
-            ld = bpy.data.lights.new(f"key{i}", "POINT")
-            ld.energy = 140.0
+            if self.photoreal:
+                # long thin softboxes: the classic jewelry-photography reflection,
+                # a bright white streak sliding across each facet
+                ld = bpy.data.lights.new(f"key{i}", "AREA")
+                ld.shape = "RECTANGLE"
+                ld.size, ld.size_y = 0.9, 0.12
+                ld.energy = 90.0
+            else:
+                ld = bpy.data.lights.new(f"key{i}", "POINT")
+                ld.energy = 140.0
             setp(ld, "shadow_soft_size", 0.12)
             setp(ld, "use_shadow", False)
             # stronger glints without flattening the facets with more fill light
@@ -533,6 +765,10 @@ class World:
         colors, _ = self.journey.at(y + 8.0)
         for i, (ob, dx, dz) in enumerate(self.lights):
             ob.location = (dx, y + (1.2 if i % 2 else 3.2), dz)
+            if self.photoreal:
+                # aim each softbox outward at the jewel wall, tilted forward
+                aim = Vector((dx, 0.9, dz)).normalized()
+                ob.rotation_euler = aim.to_track_quat("-Z", "Y").to_euler()
             # alternate near-white and palette-tinted glints
             tint = colors[i % 3] * 0.45 + 0.55 if i % 2 else colors[i % 3] * 0.85 + 0.15
             ob.data.color = tuple(float(c) for c in np.clip(tint, 0, 1))
@@ -565,6 +801,8 @@ def main():
     ap.add_argument("--height", type=int, default=1080)
     ap.add_argument("--fps", type=float, default=24.0)
     ap.add_argument("--samples", type=int, default=24)
+    ap.add_argument("--engine", choices=["eevee", "cycles"], default="eevee",
+                    help="cycles = photoreal path tracing (much slower)")
     ap.add_argument("--speed", type=float, default=1.0)
     args = ap.parse_args(argv)
 

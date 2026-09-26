@@ -12,11 +12,17 @@ One custom 3D video per week, each in its own folder:
    sample is rendered for approval.
 2. Once approved, the week's folder has everything needed to render the
    full video on your own computer:
-   - **`speed_test.bat`** — renders a few frames and estimates how long
-     10 minutes / 1 hour / 3 hours take on your machine. Run it first.
+   - **`speed_test.bat`** — renders a few frames in both looks and
+     estimates how long 10 minutes / 1 hour / 3 hours take on your
+     machine. Run it first. It also says whether Blender found your
+     graphics card.
    - **`render.bat`** — renders the full video (3 hours by default), with
      your music, crash-safely. After a power cut or crash, just run it
      again and answer **Y** to finish the interrupted render.
+   - Two looks: **Photoreal** (Cycles path tracing, many times slower:
+     real refraction, glowing things light their surroundings) and
+     **Standard** (EEVEE, the default, practical for 3-hour videos). Same video,
+     same journey; only the lighting quality differs.
 3. The approved sample is literally a 10-second excerpt of the final video
    (the launcher uses the same seed), so the full render looks exactly like
    what you approved.
@@ -27,7 +33,9 @@ One custom 3D video per week, each in its own folder:
   scenes are tested on Blender 4.0, 4.5 LTS and 5.0.
 - The PortalMachine setup already done (`setup.bat`), which provides Python
   and ffmpeg.
-- Blender's EEVEE engine uses your graphics card automatically.
+- Both looks use your graphics card automatically. For Photoreal on an
+  NVIDIA RTX card, Blender uses OptiX (the RTX ray-tracing cores); keep the
+  NVIDIA driver up to date.
 
 ## Why every video is seamless
 
@@ -40,7 +48,8 @@ checked frame-by-frame for any jump.
 
 A scene is a Python script run by Blender (`blender -b -P scene.py -- ...`)
 that accepts `--seed --start --end --outdir --width --height --fps
---samples` (render frames to `outdir/f_0000123.jpg`, skip existing ones,
+--samples --engine {cycles,eevee}` (print `BLENDER <version> ENGINE <device>`
+first; render frames to `outdir/f_0000123.jpg`, skip existing ones,
 print `FRAME <n> <seconds>`) and `--still T --out file.png`. The shared
 `common/render_driver.py` handles chunking, resume, the glow pass,
 joining, music and the speed test.

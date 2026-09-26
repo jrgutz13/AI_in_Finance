@@ -44,16 +44,26 @@ if "%RES%"=="2" set "RESARG=--resolution 2560x1440"
 if "%RES%"=="3" set "RESARG=--resolution 3840x2160"
 
 echo.
+echo Look?  (run speed_test.bat first to see how long each takes)
+echo   1  Standard  - the approved look; practical for 3-hour videos (EEVEE)
+echo   2  Photoreal - real refracting glass and light (Cycles). Many times
+echo                  slower: best for shorter videos
+set "LOOK="
+set /p LOOK="Choose 1-2 [press Enter for 1]: "
+set "ENGARG=--engine eevee"
+if "%LOOK%"=="2" set "ENGARG=--engine cycles"
+
+echo.
 set "MUSIC="
 set /p MUSIC="Music file to loop underneath (drag the file here, or Enter for silent): "
 if defined MUSIC set "MUSIC=%MUSIC:"=%"
 
 REM seed 1 = the same kaleidoscope journey as the approved 10-second sample
 if "%MUSIC%"=="" goto :silent
-%PY% %DRIVER% --scene %SCENE% --seed 1 --fps 24 --duration %DUR% %RESARG% --audio "%MUSIC%"
+%PY% %DRIVER% --scene %SCENE% --seed 1 --fps 24 --duration %DUR% %RESARG% %ENGARG% --audio "%MUSIC%"
 goto :finished
 :silent
-%PY% %DRIVER% --scene %SCENE% --seed 1 --fps 24 --duration %DUR% %RESARG%
+%PY% %DRIVER% --scene %SCENE% --seed 1 --fps 24 --duration %DUR% %RESARG% %ENGARG%
 
 :finished
 if errorlevel 1 (
