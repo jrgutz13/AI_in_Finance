@@ -23,6 +23,7 @@ manifest records progress. --resume continues from the last frame on disk.
 import argparse
 import glob
 import json
+import math
 import os
 import random
 import re
@@ -111,10 +112,12 @@ def device_note(line):
 
 
 def blender_args(s, extra):
-    return ([s["blender"], "-b", "--factory-startup", "-P", s["scene"], "--",
+    return ([s["blender"], "-b", "--factory-startup", "--python-exit-code", "1",
+             "-P", s["scene"], "--",
              "--seed", str(s["seed"]), "--width", str(s["width"]),
              "--height", str(s["height"]), "--fps", str(s["fps"]),
-             "--samples", str(s["samples"]), "--engine", s.get("engine", "eevee")] + extra)
+             "--samples", str(s["samples"]), "--engine", s.get("engine", "cycles")]
+            + (["--loop", str(s["loop"])] if s.get("loop") else []) + extra)
 
 
 def run_blender(s, first, last, frames_dir, progress):
@@ -167,7 +170,8 @@ def find_unfinished(outdir="output"):
 
 def render(s):
     fps = s["fps"]
-    total = int(round(s["duration"] * fps))
+    # a looping video renders one loop; join() repeats it to full length
+    total = int(round((s.get("loop") or s["duration"]) * fps))
     per = int(round(s["chunk"] * fps))
     chunks = [(a, min(a + per, total)) for a in range(0, total, per)]
     pdir = s["parts_dir"]
@@ -210,9 +214,11 @@ def render(s):
 def join(s, chunks):
     pdir, out = s["parts_dir"], s["out"]
     listfile = os.path.join(pdir, "list.txt")
+    repeats = math.ceil(s["duration"] / s["loop"] - 1e-9) if s.get("loop") else 1
     with open(listfile, "w") as f:
-        for i in range(len(chunks)):
-            f.write(f"file 'chunk_{i:05d}.ts'\n")
+        for _ in range(repeats):
+            for i in range(len(chunks)):
+                f.write(f"file 'chunk_{i:05d}.ts'\n")
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listfile]
     if s.get("audio") and os.path.isfile(s["audio"]):
         cmd += ["-stream_loop", "-1", "-i", s["audio"], "-map", "0:v", "-map", "1:a",
@@ -221,7 +227,7 @@ def join(s, chunks):
         cmd += ["-map", "0:v"]
     cmd += ["-c:v", "copy"]
     size = sum(os.path.getsize(os.path.join(pdir, f"chunk_{i:05d}.ts")) for i in range(len(chunks)))
-    if shutil.disk_usage(os.path.dirname(os.path.abspath(out))).free > size * 2.4:
+    if shutil.disk_usage(os.path.dirname(os.path.abspath(out))).free > size * repeats * 2.4:
         cmd += ["-movflags", "+faststart"]
     subprocess.run(cmd + ["-t", f"{s['duration']:.3f}", out], check=True)
     shutil.rmtree(pdir, ignore_errors=True)
@@ -251,8 +257,11 @@ def speed_test(s, frames=6):
         return 1
     per = sum(times[2:]) / len(times[2:])      # first frames include warm-up
     print(f"\n  {s['width']}x{s['height']}: {per:.2f} seconds per frame")
-    for label, sec in (("10 minutes", 600), ("1 hour", 3600), ("3 hours", 10800)):
-        print(f"  a {label:10s} video would take about {fmt_ts(per * sec * s['fps'])}")
+    for label, sec in (("10-minute", 600), ("20-minute", 1200), ("1-hour", 3600),
+                       ("3-hour", 10800)):
+        print(f"  a {label:9s} video (or loop) would take about {fmt_ts(per * sec * s['fps'])}")
+    print("  (a looping video only renders the loop: a 20-minute loop makes a 3-hour"
+          " video in the 20-minute time)")
     return 0
 
 
@@ -262,8 +271,11 @@ def main(argv=None):
     ap.add_argument("--duration", type=parse_duration, default=parse_duration("3h"))
     ap.add_argument("--resolution", default="1920x1080")
     ap.add_argument("--fps", type=int, default=24)
-    ap.add_argument("--engine", choices=["cycles", "eevee"], default="eevee",
-                    help="eevee = standard look; cycles = photoreal path tracing (much slower)")
+    ap.add_argument("--engine", choices=["cycles", "eevee"], default="cycles",
+                    help="cycles = photoreal path tracing; eevee = fast preview")
+    ap.add_argument("--loop", type=parse_duration, default=None, metavar="LENGTH",
+                    help="render one seamless loop of this length (e.g. 20m) and repeat "
+                         "it to --duration: much faster")
     ap.add_argument("--samples", type=int, default=None,
                     help="default: 48 for cycles (denoised), 16 for eevee")
     ap.add_argument("--seed", type=int, default=None)
@@ -314,6 +326,7 @@ def main(argv=None):
     s = {"scene": os.path.abspath(args.scene), "blender": blender, "seed": seed,
          "duration": args.duration, "width": w, "height": h, "fps": args.fps,
          "engine": args.engine,
+         "loop": (args.loop if args.loop and args.loop < args.duration else None),
          "samples": args.samples or (48 if args.engine == "cycles" else 16),
          "chunk": args.chunk, "crf": args.crf,
          "start_frame": int(round(args.start_at * args.fps)),
@@ -340,6 +353,8 @@ def main(argv=None):
     free = shutil.disk_usage(os.path.abspath("output")).free / 1e9
     print(f"video      {name}, {w}x{h} @ {args.fps} fps, {fmt_ts(args.duration)}, seed {seed}")
     print(f"look       {args.engine} ({s['samples']} samples)")
+    if s["loop"]:
+        print(f"loop       {fmt_ts(s['loop'])} rendered once, repeated seamlessly to full length")
     print(f"blender    {blender}")
     print(f"output     {out}")
     print(f"size       up to ~{worst:.1f} GB (+{tmp:.1f} GB working space); free {free:.0f} GB")

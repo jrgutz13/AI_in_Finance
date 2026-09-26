@@ -22,13 +22,20 @@ the light. It fills the frame with detail while the stone keeps the blacks
 deep. Every material fades to black with distance from the camera, so rings
 are born invisibly in the dark far ahead.
 
-Two looks from the same scene: --engine cycles (photoreal: the gems are real
-refracting glass with light inside, and every glowing filament lights its
-surroundings) and --engine eevee (several times faster).
+Rendered photoreal with Cycles (the default): the gems are real refracting
+glass with light inside, and every glowing filament lights its
+surroundings. --engine eevee remains for quick previews only.
 
 Seamless: everything is a pure function of (seed, time). Rings are built as
 they come into view and deleted behind the camera, so memory stays flat and
 separately rendered frame ranges join perfectly.
+
+Looping (--loop SECONDS): the world returns exactly to its starting state
+after one loop. The tunnel repeats after an even whole number of rings
+(speed nudged to fit), the palette journey wraps around, every ring turns a
+whole number of symmetry steps and every jewel a whole number of turns per
+loop, and the wall veins are drawn on a torus one loop long. The loop can
+then be played back to back forever with no visible join.
 """
 
 import argparse
@@ -118,9 +125,10 @@ class Journey:
     """What the tunnel looks like at each distance along it: palette blend and
     symmetry order. Waypoints every 45-90 units (roughly 50-95 s of flight)."""
 
-    def __init__(self, seed):
+    def __init__(self, seed, period=None):
         rng = rng_for(seed, 11)
         self.ys, self.pal, self.sym = [-50.0], [int(rng.integers(len(PALETTES)))], [8]
+        self.period = period
         y = -50.0
         while y < 40000.0:                            # far beyond 3 h of travel
             y += float(rng.uniform(45.0, 90.0))
@@ -130,8 +138,17 @@ class Journey:
             self.ys.append(y)
             self.pal.append(p)
             self.sym.append(int(rng.choice([6, 8, 8, 10, 12])))
+        if period:
+            # looping video: the journey ends where it began, one period on
+            keep = max(1, sum(1 for v in self.ys if v < period - 50.0 - 40.0))
+            self.ys, self.pal, self.sym = self.ys[:keep], self.pal[:keep], self.sym[:keep]
+            self.ys.append(period - 50.0)
+            self.pal.append(self.pal[0])
+            self.sym.append(self.sym[0])
 
     def at(self, y):
+        if self.period:
+            y = (y + 50.0) % self.period - 50.0
         i = int(np.clip(np.searchsorted(self.ys, y) - 1, 0, len(self.ys) - 2))
         f = smootherstep((y - self.ys[i]) / (self.ys[i + 1] - self.ys[i]))
         a, b = PALETTES[self.pal[i]], PALETTES[self.pal[i + 1]]
@@ -251,21 +268,31 @@ def crystal_cluster(rng, wedge, count):
 def wall_tube(y0, y1, journey, sides=128, rows=4):
     """One section of the stone wall around the tunnel, vertex-colored from
     the journey palette at each vertex's depth so sections join without a
-    seam. Faces point inwards."""
-    verts, cols, faces = [], [], []
+    seam. Faces point inwards. Also returns the coordinates the vein texture
+    is drawn at: the wall's own position, or, for a looping video, the wall
+    wrapped onto a torus one loop long, so the veins repeat exactly with the
+    loop and still join seamlessly (same scale in every direction)."""
+    verts, cols, tex, faces = [], [], [], []
+    per = journey.period
     for j in range(rows + 1):
         y = y0 + (y1 - y0) * j / rows
         colors, _ = journey.at(y)
         c = colors[0] * 0.6 + colors[1] * 0.4
         for s in range(sides):
             ph = TAU * s / sides
-            verts.append((WALL_R * math.cos(ph), y, WALL_R * math.sin(ph)))
+            x, z = WALL_R * math.cos(ph), WALL_R * math.sin(ph)
+            verts.append((x, y, z))
             cols.append(c)
+            if per:
+                big, psi = per / TAU, TAU * y / per
+                tex.append(((big + x) * math.cos(psi), (big + x) * math.sin(psi), z))
+            else:
+                tex.append((x, y, z))
     for j in range(rows):
         for s in range(sides):
             a, b = j * sides + s, j * sides + (s + 1) % sides
             faces.append((a, b, b + sides, a + sides))
-    return verts, faces, cols
+    return verts, faces, cols, tex
 
 
 def uv_sphere(center, r, rows=6, sides=8):
@@ -420,6 +447,8 @@ def setup_cycles(scene, samples):
     except (KeyError, AttributeError):
         pass
     cy.device = "GPU" if gpu else "CPU"
+    # keep the scene loaded between frames instead of rebuilding it each time
+    setp(scene.render, "use_persistent_data", True)
     cy.samples = samples
     setp(cy, "use_adaptive_sampling", True)
     setp(cy, "adaptive_threshold", 0.02)
@@ -446,7 +475,7 @@ def setup_cycles(scene, samples):
 def mat_wall():
     """The geode's stone wall: near-black polished stone that mirrors all the
     glow in the tunnel, veined with faint agate bands in the palette colors.
-    The bands use world coordinates so neighbouring wall sections match."""
+    The bands use continuous coordinates so neighbouring wall sections match."""
     m = bpy.data.materials.new("wall")
     m.use_nodes = True
     nt = m.node_tree
@@ -459,7 +488,8 @@ def mat_wall():
     bs.inputs["Metallic"].default_value = 0.2
     setp(sock(bs, "Coat Weight", "Clearcoat"), "default_value", 1.0)
     setp(sock(bs, "Coat Roughness", "Clearcoat Roughness"), "default_value", 0.03)
-    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    geo = nt.nodes.new("ShaderNodeAttribute")          # vein coordinates (see wall_tube)
+    geo.attribute_name = "tp"
     wave = nt.nodes.new("ShaderNodeTexWave")
     setp(wave, "wave_type", "BANDS")
     setp(wave, "bands_direction", "DIAGONAL")
@@ -467,7 +497,7 @@ def mat_wall():
     wave.inputs["Distortion"].default_value = 7.0
     wave.inputs["Detail"].default_value = 4.0
     setp(sock(wave, "Detail Scale"), "default_value", 1.2)
-    nt.links.new(geo.outputs["Position"], wave.inputs["Vector"])
+    nt.links.new(geo.outputs["Vector"], wave.inputs["Vector"])
     ramp = nt.nodes.new("ShaderNodeValToRGB")          # thin bright bands
     ramp.color_ramp.elements[0].position = 0.72
     ramp.color_ramp.elements[0].color = (0, 0, 0, 1)
@@ -476,7 +506,7 @@ def mat_wall():
     nt.links.new(wave.outputs["Fac"], ramp.inputs["Fac"])
     noise = nt.nodes.new("ShaderNodeTexNoise")         # mottled dim glow between bands
     noise.inputs["Scale"].default_value = 1.8
-    nt.links.new(geo.outputs["Position"], noise.inputs["Vector"])
+    nt.links.new(geo.outputs["Vector"], noise.inputs["Vector"])
     mix = nt.nodes.new("ShaderNodeMath")
     mix.operation = "MULTIPLY_ADD"
     nt.links.new(noise.outputs["Fac"], mix.inputs[0])
@@ -521,14 +551,20 @@ class Ring:
     def __init__(self, world, k):
         self.k = k
         seed = world.seed
-        rng = rng_for(seed, 700001, k)
+        # a looping video repeats the same rings every loop_rings rings
+        kc = k % world.loop_rings if world.loop_rings else k
+        rng = rng_for(seed, 700001, kc)
         y = k * SEG
-        colors, n = world.journey.at(y)
+        colors, n = world.journey.at(kc * SEG)
         self.n = n
         self.objects, self.meshes, self.spinners = [], [], []
         self.dir = 1.0 if k % 2 == 0 else -1.0
         self.phase = float(rng.uniform(0, TAU))
         self.turn_rate = float(rng.uniform(0.6, 1.0)) * TAU / (n * 22.0)  # radians/s
+        if world.loop_time:
+            # whole symmetry steps per loop, so the pattern comes back exactly
+            steps = max(1, round(self.turn_rate * world.loop_time / (TAU / n)))
+            self.turn_rate = steps * (TAU / n) / world.loop_time
         wedge = math.pi / n
 
         root = bpy.data.objects.new(f"ring{k}", None)
@@ -553,6 +589,8 @@ class Ring:
             spin_axis = rng.normal(0, 1, 3)
             spin_axis /= np.linalg.norm(spin_axis)
             spin_rate = rng.uniform(0.25, 0.7) * rng.choice([-1, 1])
+            if world.loop_time:                       # whole turns per loop
+                spin_rate = round(spin_rate * world.loop_time / TAU) * TAU / world.loop_time
             pieces.append((me, world.mats["jewel"], col, (r * math.cos(th), dy, r * math.sin(th)),
                            size, (spin_axis, spin_rate, rng.uniform(0, TAU))))
 
@@ -590,7 +628,7 @@ class Ring:
 
         # geode crystals lining the wall, in three color groups (the ring's
         # own rng stream is untouched above, so jewels match earlier samples)
-        crng = rng_for(seed, 700002, k)
+        crng = rng_for(seed, 700002, kc)
         cv, cf, owner = crystal_cluster(crng, wedge, int(36 * 8 / n) + 12)
         grp = crng.choice(3, size=max(owner) + 1, p=[0.5, 0.3, 0.2])
         for g in range(3):
@@ -628,7 +666,7 @@ class Ring:
                     self.spinners.append((ob, spin))
 
         # a thin glowing hoop marks every third ring: rhythm as you fly
-        if k % 3 == 0:
+        if kc % 3 == 0:
             ang = np.linspace(0, TAU, 97)
             pts = np.stack([RADIUS * 1.02 * np.cos(ang), np.zeros_like(ang),
                             RADIUS * 1.02 * np.sin(ang)], 1)
@@ -643,11 +681,13 @@ class Ring:
             self.objects.append(ob)
 
         # this ring's section of the stone wall (does not turn with the ring)
-        v, fc, cols = wall_tube(y - SEG / 2, y + SEG / 2, world.journey)
+        v, fc, cols, tex = wall_tube(y - SEG / 2, y + SEG / 2, world.journey)
         me = make_mesh(f"wall{k}", v, fc, smooth=True)
         ca = me.color_attributes.new("col", "FLOAT_COLOR", "POINT")
         ca.data.foreach_set("color", np.concatenate(
             [np.append(c, 1.0) for c in cols]).astype(np.float32))
+        ta = me.attributes.new("tp", "FLOAT_VECTOR", "POINT")
+        ta.data.foreach_set("vector", np.asarray(tex, np.float32).ravel())
         me.materials.append(world.mats["wall"])
         self.meshes.append(me)
         ob = bpy.data.objects.new(f"wall{k}", me)
@@ -678,7 +718,14 @@ class World:
         self.scene = scene = bpy.context.scene
         self.seed = args.seed
         self.speed = SPEED * args.speed
-        self.journey = Journey(self.seed)
+        self.loop_time = self.loop_rings = None
+        if args.loop:
+            # an even whole number of rings per loop (alternate rings turn
+            # opposite ways), speed nudged to fit exactly
+            self.loop_time = float(args.loop)
+            self.loop_rings = max(2, 2 * round(self.speed * self.loop_time / SEG / 2))
+            self.speed = self.loop_rings * SEG / self.loop_time
+        self.journey = Journey(self.seed, self.loop_rings * SEG if self.loop_rings else None)
         self.coll = scene.collection
         self.rings = {}
 
@@ -801,9 +848,11 @@ def main():
     ap.add_argument("--height", type=int, default=1080)
     ap.add_argument("--fps", type=float, default=24.0)
     ap.add_argument("--samples", type=int, default=24)
-    ap.add_argument("--engine", choices=["eevee", "cycles"], default="eevee",
-                    help="cycles = photoreal path tracing (much slower)")
+    ap.add_argument("--engine", choices=["eevee", "cycles"], default="cycles",
+                    help="cycles = photoreal path tracing; eevee = fast preview")
     ap.add_argument("--speed", type=float, default=1.0)
+    ap.add_argument("--loop", type=float, default=None, metavar="SECONDS",
+                    help="make the video an exact loop of this length")
     args = ap.parse_args(argv)
 
     world = World(args)

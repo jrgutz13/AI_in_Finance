@@ -44,14 +44,10 @@ if "%RES%"=="2" set "RESARG=--resolution 2560x1440"
 if "%RES%"=="3" set "RESARG=--resolution 3840x2160"
 
 echo.
-echo Look?  (run speed_test.bat first to see how long each takes)
-echo   1  Standard  - the approved look; practical for 3-hour videos (EEVEE)
-echo   2  Photoreal - real refracting glass and light (Cycles). Many times
-echo                  slower: best for shorter videos
-set "LOOK="
-set /p LOOK="Choose 1-2 [press Enter for 1]: "
-set "ENGARG=--engine eevee"
-if "%LOOK%"=="2" set "ENGARG=--engine cycles"
+set "LOOP="
+set /p LOOP="Seamless loop length - only this much is rendered, then repeated [press Enter for 20m]: "
+if "%LOOP%"=="" set LOOP=20m
+set "ENGARG=--engine cycles --loop %LOOP%"
 
 echo.
 set "MUSIC="
