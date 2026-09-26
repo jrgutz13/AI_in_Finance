@@ -116,6 +116,17 @@ PALETTES = [
 ]
 
 
+# --style real: the colors of actual gemstones, deeper and less neon
+REAL_PALETTES = [
+    [srgb(c) for c in ("#9b111e", "#0f3fa8", "#e8a33d")],   # ruby / sapphire / topaz
+    [srgb(c) for c in ("#6a2c91", "#e0a526", "#5fb8c9")],   # amethyst / citrine / aquamarine
+    [srgb(c) for c in ("#0b7a3e", "#8e0f24", "#1d4fb5")],   # emerald / ruby / sapphire
+    [srgb(c) for c in ("#123d9c", "#d98b1f", "#c2457a")],   # sapphire / topaz / pink tourmaline
+    [srgb(c) for c in ("#7a0f1c", "#5b2a86", "#4fa3b8")],   # garnet / amethyst / aquamarine
+    [srgb(c) for c in ("#6f9a1c", "#a12a5e", "#e6c88a")],   # peridot / rhodolite / champagne
+]
+
+
 def smootherstep(x):
     x = min(max(x, 0.0), 1.0)
     return x * x * x * (x * (x * 6.0 - 15.0) + 10.0)
@@ -125,8 +136,9 @@ class Journey:
     """What the tunnel looks like at each distance along it: palette blend and
     symmetry order. Waypoints every 45-90 units (roughly 50-95 s of flight)."""
 
-    def __init__(self, seed, period=None):
+    def __init__(self, seed, period=None, palettes=PALETTES):
         rng = rng_for(seed, 11)
+        self.palettes = palettes
         self.ys, self.pal, self.sym = [-50.0], [int(rng.integers(len(PALETTES)))], [8]
         self.period = period
         y = -50.0
@@ -151,7 +163,7 @@ class Journey:
             y = (y + 50.0) % self.period - 50.0
         i = int(np.clip(np.searchsorted(self.ys, y) - 1, 0, len(self.ys) - 2))
         f = smootherstep((y - self.ys[i]) / (self.ys[i + 1] - self.ys[i]))
-        a, b = PALETTES[self.pal[i]], PALETTES[self.pal[i + 1]]
+        a, b = self.palettes[self.pal[i]], self.palettes[self.pal[i + 1]]
         colors = [ca + (cb - ca) * f for ca, cb in zip(a, b)]
         sym = self.sym[i] if f < 0.5 else self.sym[i + 1]
         return colors, sym
@@ -472,7 +484,7 @@ def setup_cycles(scene, samples):
     return gpu or "CPU"
 
 
-def mat_wall():
+def mat_wall(real=False):
     """The geode's stone wall: near-black polished stone that mirrors all the
     glow in the tunnel, veined with faint agate bands in the palette colors.
     The bands use continuous coordinates so neighbouring wall sections match."""
@@ -512,10 +524,46 @@ def mat_wall():
     nt.links.new(noise.outputs["Fac"], mix.inputs[0])
     mix.inputs[1].default_value = 0.025
     nt.links.new(ramp.outputs["Color"], mix.inputs[2])
+    if real:
+        # real stone: the agate bands are colored mineral, lit only by the
+        # lamps, over a rough surface (bump) with a polished sheen
+        nt.links.new(_vmul(nt, attr.outputs["Color"], _mul(nt, _mul(nt, mix.outputs["Value"], fade), 0.5)),
+                     bs.inputs["Base Color"])
+        bs.inputs["Roughness"].default_value = 0.3
+        bs.inputs["Metallic"].default_value = 0.0
+        setp(sock(bs, "Coat Weight", "Clearcoat"), "default_value", 0.6)
+        bump = nt.nodes.new("ShaderNodeBump")
+        bump.inputs["Strength"].default_value = 0.35
+        bn = nt.nodes.new("ShaderNodeTexNoise")
+        bn.inputs["Scale"].default_value = 9.0
+        bn.inputs["Detail"].default_value = 8.0
+        nt.links.new(geo.outputs["Vector"], bn.inputs["Vector"])
+        nt.links.new(bn.outputs["Fac"], bump.inputs["Height"])
+        nt.links.new(bump.outputs["Normal"], bs.inputs["Normal"])
+        return m
     nt.links.new(attr.outputs["Color"], sock(bs, "Emission Color", "Emission"))
     nt.links.new(_mul(nt, _mul(nt, mix.outputs["Value"], fade), 0.55),
                  sock(bs, "Emission Strength"))
     return m
+
+
+def mat_gold():
+    """Polished gold wire (--style real, in place of the glowing filaments)."""
+    m = bpy.data.materials.new("gold")
+    m.use_nodes = True
+    nt = m.node_tree
+    bs = nt.nodes["Principled BSDF"]
+    fade = _fade_factor(nt)
+    nt.links.new(_vmul(nt, _rgb(nt, (1.0, 0.72, 0.33)), fade), bs.inputs["Base Color"])
+    bs.inputs["Metallic"].default_value = 1.0
+    bs.inputs["Roughness"].default_value = 0.18
+    return m
+
+
+def _rgb(nt, c):
+    n = nt.nodes.new("ShaderNodeRGB")
+    n.outputs[0].default_value = (c[0], c[1], c[2], 1.0)
+    return n.outputs[0]
 
 
 def mat_jewel_glass(name="jewel_glass", ior=2.2, glow_amount=3.0):
@@ -535,6 +583,8 @@ def mat_jewel_glass(name="jewel_glass", ior=2.2, glow_amount=3.0):
     setp(sock(bs, "Transmission Weight", "Transmission"), "default_value", 1.0)
     setp(sock(bs, "Thin Film Thickness"), "default_value", 320.0)   # faint iridescence
     setp(sock(bs, "Thin Film IOR"), "default_value", 1.45)
+    if not glow_amount:
+        return m
     # inner glow: emission inside the volume of the stone
     out = nt.nodes["Material Output"]
     vem = nt.nodes.new("ShaderNodeEmission")
@@ -586,6 +636,8 @@ class Ring:
             dy = rng.uniform(-0.45, 0.45) * SEG
             size = rng.uniform(0.12, 0.5) ** 1.3 * 1.6 * (0.6 + 0.4 * r / RADIUS)
             col = colors[int(rng.choice(3, p=[0.45, 0.4, 0.15]))] * rng.uniform(0.85, 1.25)
+            if world.real:
+                col = np.clip(col, 0, 1) ** 0.45     # clear gem glass lets light through
             spin_axis = rng.normal(0, 1, 3)
             spin_axis /= np.linalg.norm(spin_axis)
             spin_rate = rng.uniform(0.25, 0.7) * rng.choice([-1, 1])
@@ -617,6 +669,8 @@ class Ring:
                 faces_b += [tuple(i + base for i in q) for q in fc]
         fil_col = colors[int(rng.integers(0, 3))] * 1.0
         bead_col = colors[2] * 1.2
+        if world.real:
+            bead_col = np.array([0.95, 0.95, 0.95])       # diamonds
         if verts_f:
             me = make_mesh(f"fil{k}", verts_f, faces_f, smooth=True)
             self.meshes.append(me)
@@ -641,6 +695,8 @@ class Ring:
                            [tuple(remap[i] for i in f) for f in fs])
             self.meshes.append(me)
             col = colors[(g + k // 7) % 3] * (0.45 if g == 0 else 0.7)
+            if world.real:
+                col = np.clip(col, 0, 1) ** 0.5
             pieces.append((me, world.mats["crystal"], col, (0, 0, 0), 1.0, None))
 
         # --- replicate the wedge 2n times: rotate, and mirror every other copy
@@ -725,11 +781,13 @@ class World:
             self.loop_time = float(args.loop)
             self.loop_rings = max(2, 2 * round(self.speed * self.loop_time / SEG / 2))
             self.speed = self.loop_rings * SEG / self.loop_time
-        self.journey = Journey(self.seed, self.loop_rings * SEG if self.loop_rings else None)
+        self.journey = Journey(self.seed, self.loop_rings * SEG if self.loop_rings else None,
+                               REAL_PALETTES if args.style == "real" else PALETTES)
         self.coll = scene.collection
         self.rings = {}
 
         self.photoreal = args.engine == "cycles"
+        self.real = args.style == "real"
         self.engine = setup_cycles(scene, args.samples) if self.photoreal else set_eevee(scene)
         r = scene.render
         r.resolution_x, r.resolution_y = args.width, args.height
@@ -738,7 +796,13 @@ class World:
         setp(r, "use_motion_blur", False)
         vs = scene.view_settings
         setp(vs, "view_transform", "Standard")     # saturated neon, true blacks
+        if args.style == "real":
+            # camera-like tone curve: highlights roll off instead of clipping
+            setp(vs, "view_transform", "AgX") or setp(vs, "view_transform", "Filmic")
         setp(vs, "look", "None")
+        if args.style == "real":
+            setp(vs, "look", "AgX - Medium High Contrast") or setp(vs, "look", "Medium High Contrast")
+            setp(vs, "exposure", 0.9)
         setp(vs, "exposure", 0.0)
         setp(vs, "gamma", 1.0)
         ee = scene.eevee
@@ -759,6 +823,20 @@ class World:
         bg = w.node_tree.nodes.get("Background")
         bg.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
         bg.inputs["Strength"].default_value = 0.0
+        if args.style == "real":
+            # soft ambient light for the glass to refract, as in a jewelry studio
+            # (the camera itself still sees black down the tunnel)
+            bg.inputs["Color"].default_value = (0.9, 0.92, 1.0, 1.0)
+            bg.inputs["Strength"].default_value = 0.7
+            wn = w.node_tree
+            lp = wn.nodes.new("ShaderNodeLightPath")
+            black = wn.nodes.new("ShaderNodeBackground")
+            black.inputs["Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+            mix = wn.nodes.new("ShaderNodeMixShader")
+            wn.links.new(lp.outputs["Is Camera Ray"], mix.inputs["Fac"])
+            wn.links.new(bg.outputs["Background"], mix.inputs[1])
+            wn.links.new(black.outputs["Background"], mix.inputs[2])
+            wn.links.new(mix.outputs["Shader"], wn.nodes["World Output"].inputs["Surface"])
 
         self.mats = {"jewel": mat_jewel_glass() if self.photoreal else mat_jewel(),
                      "crystal": (mat_jewel_glass("crystal", 1.55, 0.8) if self.photoreal
@@ -768,6 +846,13 @@ class World:
                      # clip to white: the glow pass adds the halo
                      "filament": mat_glow("filament", 3.5),
                      "bead": mat_glow("bead", 7.0)}
+        if self.real:
+            # real objects: nothing glows, all light comes from the lamps
+            self.mats.update({"jewel": mat_jewel_glass("jewel_real", 2.2, 0.0),
+                              "crystal": mat_jewel_glass("crystal_real", 1.55, 0.0),
+                              "wall": mat_wall(real=True),
+                              "filament": mat_gold(),
+                              "bead": mat_jewel_glass("diamond", 2.42, 0.0)})
 
         # A ring of small, bright lights travelling with the camera. In a black
         # world the jewels can only reflect lights, and small bright ones give
@@ -781,7 +866,7 @@ class World:
                 ld = bpy.data.lights.new(f"key{i}", "AREA")
                 ld.shape = "RECTANGLE"
                 ld.size, ld.size_y = 0.9, 0.12
-                ld.energy = 90.0
+                ld.energy = 700.0 if self.real else 90.0
             else:
                 ld = bpy.data.lights.new(f"key{i}", "POINT")
                 ld.energy = 140.0
@@ -801,6 +886,10 @@ class World:
         cd.dof.use_dof = True
         cd.dof.focus_distance = 5.5
         cd.dof.aperture_fstop = 2.8
+        if self.real:
+            # macro-lens look: shallow focus, foreground and distance melt away
+            cd.dof.focus_distance = 5.0
+            cd.dof.aperture_fstop = 1.6
         self.cam = bpy.data.objects.new("cam", cd)
         self.coll.objects.link(self.cam)
         scene.camera = self.cam
@@ -818,6 +907,8 @@ class World:
                 ob.rotation_euler = aim.to_track_quat("-Z", "Y").to_euler()
             # alternate near-white and palette-tinted glints
             tint = colors[i % 3] * 0.45 + 0.55 if i % 2 else colors[i % 3] * 0.85 + 0.15
+            if self.real:                                 # studio lamps: warm/neutral white
+                tint = np.array([1.0, 0.93, 0.84]) if i % 2 else np.array([0.95, 0.97, 1.0])
             ob.data.color = tuple(float(c) for c in np.clip(tint, 0, 1))
 
         want = set(range(int(math.floor((y - 3.0) / SEG)), int(math.floor((y + VIEW) / SEG)) + 1))
@@ -851,6 +942,8 @@ def main():
     ap.add_argument("--engine", choices=["eevee", "cycles"], default="cycles",
                     help="cycles = photoreal path tracing; eevee = fast preview")
     ap.add_argument("--speed", type=float, default=1.0)
+    ap.add_argument("--style", choices=["neon", "real"], default="neon",
+                    help="neon = glowing psychedelic look; real = real gems, gold and stone")
     ap.add_argument("--loop", type=float, default=None, metavar="SECONDS",
                     help="make the video an exact loop of this length")
     args = ap.parse_args(argv)
