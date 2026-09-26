@@ -470,6 +470,7 @@ def setup_cycles(scene, samples):
     except ImportError:
         has_oidn = False
     setp(cy, "use_denoising", has_oidn)
+    setp(cy, "filter_width", 2.0)            # a touch of lens softness (default 1.5)
     if has_oidn:
         setp(cy, "denoiser", "OPENIMAGEDENOISE")
         setp(cy, "denoising_use_gpu", bool(gpu))
@@ -527,11 +528,11 @@ def mat_wall(real=False):
     if real:
         # real stone: the agate bands are colored mineral, lit only by the
         # lamps, over a rough surface (bump) with a polished sheen
-        nt.links.new(_vmul(nt, attr.outputs["Color"], _mul(nt, _mul(nt, mix.outputs["Value"], fade), 0.5)),
+        nt.links.new(_vmul(nt, attr.outputs["Color"], _mul(nt, _mul(nt, mix.outputs["Value"], fade), 0.25)),
                      bs.inputs["Base Color"])
-        bs.inputs["Roughness"].default_value = 0.3
+        bs.inputs["Roughness"].default_value = 0.35
         bs.inputs["Metallic"].default_value = 0.0
-        setp(sock(bs, "Coat Weight", "Clearcoat"), "default_value", 0.6)
+        setp(sock(bs, "Coat Weight", "Clearcoat"), "default_value", 0.3)
         bump = nt.nodes.new("ShaderNodeBump")
         bump.inputs["Strength"].default_value = 0.35
         bn = nt.nodes.new("ShaderNodeTexNoise")
@@ -637,7 +638,7 @@ class Ring:
             size = rng.uniform(0.12, 0.5) ** 1.3 * 1.6 * (0.6 + 0.4 * r / RADIUS)
             col = colors[int(rng.choice(3, p=[0.45, 0.4, 0.15]))] * rng.uniform(0.85, 1.25)
             if world.real:
-                col = np.clip(col, 0, 1) ** 0.45     # clear gem glass lets light through
+                col = np.clip(col, 0, 1) ** 0.6      # clear gem glass lets light through
             spin_axis = rng.normal(0, 1, 3)
             spin_axis /= np.linalg.norm(spin_axis)
             spin_rate = rng.uniform(0.25, 0.7) * rng.choice([-1, 1])
@@ -658,12 +659,17 @@ class Ring:
             yy = rng.uniform(-0.4, 0.4) * SEG + 0.35 * np.sin(t * math.pi * 2 + rng.uniform(0, TAU))
             pts = np.stack([rr * np.cos(th), yy, rr * np.sin(th)], 1)
             v, fc = tube(pts, 0.008 + 0.006 * np.sin(t * math.pi), 6)
+            skip = world.real and f > 0          # real style: one wire per wedge
+            if skip:
+                v, fc = [], []
             base = len(verts_f)
             verts_f += [tuple(x) for x in v]
             faces_f += [tuple(i + base for i in q) for q in fc]
-            for tb in np.sort(rng.uniform(0.1, 0.95, int(rng.integers(3, 7)))):
+            for bi, tb in enumerate(np.sort(rng.uniform(0.1, 0.95, int(rng.integers(3, 7))))):
                 c = pts[int(tb * (len(pts) - 1))]
                 v, fc = uv_sphere(c, rng.uniform(0.022, 0.045))
+                if skip or (world.real and bi % 2):         # and half the beads
+                    continue
                 base = len(verts_b)
                 verts_b += v
                 faces_b += [tuple(i + base for i in q) for q in fc]
@@ -683,7 +689,7 @@ class Ring:
         # geode crystals lining the wall, in three color groups (the ring's
         # own rng stream is untouched above, so jewels match earlier samples)
         crng = rng_for(seed, 700002, kc)
-        cv, cf, owner = crystal_cluster(crng, wedge, int(36 * 8 / n) + 12)
+        cv, cf, owner = crystal_cluster(crng, wedge, int((20 if world.real else 36) * 8 / n) + 8)
         grp = crng.choice(3, size=max(owner) + 1, p=[0.5, 0.3, 0.2])
         for g in range(3):
             fs = [f for f, o in zip(cf, owner) if grp[o] == g]
@@ -782,7 +788,7 @@ class World:
             self.loop_rings = max(2, 2 * round(self.speed * self.loop_time / SEG / 2))
             self.speed = self.loop_rings * SEG / self.loop_time
         self.journey = Journey(self.seed, self.loop_rings * SEG if self.loop_rings else None,
-                               REAL_PALETTES if args.style == "real" else PALETTES)
+                               REAL_PALETTES if args.palette == "gem" else PALETTES)
         self.coll = scene.collection
         self.rings = {}
 
@@ -801,8 +807,9 @@ class World:
             setp(vs, "view_transform", "AgX") or setp(vs, "view_transform", "Filmic")
         setp(vs, "look", "None")
         if args.style == "real":
-            setp(vs, "look", "AgX - Medium High Contrast") or setp(vs, "look", "Medium High Contrast")
-            setp(vs, "exposure", 0.9)
+            (setp(vs, "look", "AgX - Punchy") or setp(vs, "look", "AgX - Medium High Contrast")
+             or setp(vs, "look", "Medium High Contrast"))
+            setp(vs, "exposure", 0.7)
         setp(vs, "exposure", 0.0)
         setp(vs, "gamma", 1.0)
         ee = scene.eevee
@@ -827,7 +834,7 @@ class World:
             # soft ambient light for the glass to refract, as in a jewelry studio
             # (the camera itself still sees black down the tunnel)
             bg.inputs["Color"].default_value = (0.9, 0.92, 1.0, 1.0)
-            bg.inputs["Strength"].default_value = 0.7
+            bg.inputs["Strength"].default_value = 0.9
             wn = w.node_tree
             lp = wn.nodes.new("ShaderNodeLightPath")
             black = wn.nodes.new("ShaderNodeBackground")
@@ -848,8 +855,8 @@ class World:
                      "bead": mat_glow("bead", 7.0)}
         if self.real:
             # real objects: nothing glows, all light comes from the lamps
-            self.mats.update({"jewel": mat_jewel_glass("jewel_real", 2.2, 0.0),
-                              "crystal": mat_jewel_glass("crystal_real", 1.55, 0.0),
+            self.mats.update({"jewel": mat_jewel_glass("jewel_real", 2.2, 1.0),
+                              "crystal": mat_jewel_glass("crystal_real", 1.55, 0.25),
                               "wall": mat_wall(real=True),
                               "filament": mat_gold(),
                               "bead": mat_jewel_glass("diamond", 2.42, 0.0)})
@@ -866,7 +873,7 @@ class World:
                 ld = bpy.data.lights.new(f"key{i}", "AREA")
                 ld.shape = "RECTANGLE"
                 ld.size, ld.size_y = 0.9, 0.12
-                ld.energy = 700.0 if self.real else 90.0
+                ld.energy = 1100.0 if self.real else 90.0
             else:
                 ld = bpy.data.lights.new(f"key{i}", "POINT")
                 ld.energy = 140.0
@@ -888,8 +895,10 @@ class World:
         cd.dof.aperture_fstop = 2.8
         if self.real:
             # macro-lens look: shallow focus, foreground and distance melt away
-            cd.dof.focus_distance = 5.0
-            cd.dof.aperture_fstop = 1.6
+            cd.dof.focus_distance = 4.6
+            cd.dof.aperture_fstop = 0.45
+            cd.dof.aperture_blades = 7          # soft heptagonal bokeh, like a real lens
+            cd.dof.aperture_rotation = 0.3
         self.cam = bpy.data.objects.new("cam", cd)
         self.coll.objects.link(self.cam)
         scene.camera = self.cam
@@ -944,6 +953,8 @@ def main():
     ap.add_argument("--speed", type=float, default=1.0)
     ap.add_argument("--style", choices=["neon", "real"], default="neon",
                     help="neon = glowing psychedelic look; real = real gems, gold and stone")
+    ap.add_argument("--palette", choices=["neon", "gem"], default="neon",
+                    help="neon colors, or the colors of real gemstones")
     ap.add_argument("--loop", type=float, default=None, metavar="SECONDS",
                     help="make the video an exact loop of this length")
     args = ap.parse_args(argv)

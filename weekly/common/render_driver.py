@@ -72,20 +72,23 @@ def find_blender(explicit=None):
     return None
 
 
-def glow_filter(height, out_fmt="yuv420p"):
+def glow_filter(height, out_fmt="yuv420p", strong=False):
     """Glow around bright things, keeping blacks black: only the highlights
     are blurred and screened back on (a tight halo and a wide one). Done in
     ffmpeg, identical on every Blender version."""
     s1 = max(1.0, height / 200.0)
     s2 = max(2.0, height / 55.0)
     s3 = max(4.0, height / 16.0)
+    # strong: lower thresholds (more of the image blooms) and denser halos
+    t1, t2, t3 = (0.38, 0.28, 0.30) if strong else (0.50, 0.40, 0.45)
+    o1, o2, o3 = (1.0, 0.85, 0.6) if strong else (0.9, 0.6, 0.35)
     return (f"[0:v]format=gbrp,split=4[a][b][c][d];"
-            f"[b]curves=all='0/0 0.50/0 1/1',gblur=sigma={s1:.2f}[g1];"
-            f"[c]curves=all='0/0 0.40/0 1/1',gblur=sigma={s2:.2f}[g2];"
-            f"[d]curves=all='0/0 0.45/0 1/0.8',gblur=sigma={s3:.2f}[g3];"
-            f"[a][g1]blend=all_mode=screen:all_opacity=0.9[t];"
-            f"[t][g2]blend=all_mode=screen:all_opacity=0.6[u];"
-            f"[u][g3]blend=all_mode=screen:all_opacity=0.35,"
+            f"[b]curves=all='0/0 {t1}/0 1/1',gblur=sigma={s1:.2f}[g1];"
+            f"[c]curves=all='0/0 {t2}/0 1/1',gblur=sigma={s2:.2f}[g2];"
+            f"[d]curves=all='0/0 {t3}/0 1/0.8',gblur=sigma={s3:.2f}[g3];"
+            f"[a][g1]blend=all_mode=screen:all_opacity={o1}[t];"
+            f"[t][g2]blend=all_mode=screen:all_opacity={o2}[u];"
+            f"[u][g3]blend=all_mode=screen:all_opacity={o3},"
             f"vignette=angle=PI/5,format={out_fmt}[out]")
 
 
@@ -117,7 +120,8 @@ def blender_args(s, extra):
              "--seed", str(s["seed"]), "--width", str(s["width"]),
              "--height", str(s["height"]), "--fps", str(s["fps"]),
              "--samples", str(s["samples"]), "--engine", s.get("engine", "cycles")]
-            + (["--loop", str(s["loop"])] if s.get("loop") else []) + extra)
+            + (["--loop", str(s["loop"])] if s.get("loop") else [])
+            + (["--style", s["style"]] if s.get("style") else []) + extra)
 
 
 def run_blender(s, first, last, frames_dir, progress):
@@ -142,7 +146,8 @@ def run_blender(s, first, last, frames_dir, progress):
 def encode_chunk(s, first, count, frames_dir, out_ts):
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(s["fps"]),
                     "-start_number", str(first), "-i", os.path.join(frames_dir, "f_%07d.jpg"),
-                    "-frames:v", str(count), "-filter_complex", glow_filter(s["height"]),
+                    "-frames:v", str(count), "-filter_complex",
+                    glow_filter(s["height"], strong=s.get("glow") == "strong"),
                     "-map", "[out]", "-c:v", "libx264", "-crf", str(s["crf"]),
                     "-preset", "slow", "-maxrate", f"{s['maxrate']}M",
                     "-bufsize", f"{2 * s['maxrate']}M", "-f", "mpegts", out_ts + ".part"],
@@ -273,6 +278,8 @@ def main(argv=None):
     ap.add_argument("--fps", type=int, default=24)
     ap.add_argument("--engine", choices=["cycles", "eevee"], default="cycles",
                     help="cycles = photoreal path tracing; eevee = fast preview")
+    ap.add_argument("--style", default=None, help="passed to the scene (e.g. real)")
+    ap.add_argument("--glow", choices=["normal", "strong"], default="normal")
     ap.add_argument("--loop", type=parse_duration, default=None, metavar="LENGTH",
                     help="render one seamless loop of this length (e.g. 20m) and repeat "
                          "it to --duration: much faster")
@@ -325,7 +332,7 @@ def main(argv=None):
     out = args.out or os.path.join("output", f"{name}_{seed}.mp4")
     s = {"scene": os.path.abspath(args.scene), "blender": blender, "seed": seed,
          "duration": args.duration, "width": w, "height": h, "fps": args.fps,
-         "engine": args.engine,
+         "engine": args.engine, "style": args.style, "glow": args.glow,
          "loop": (args.loop if args.loop and args.loop < args.duration else None),
          "samples": args.samples or (48 if args.engine == "cycles" else 16),
          "chunk": args.chunk, "crf": args.crf,
@@ -343,7 +350,8 @@ def main(argv=None):
                        check=True, stdout=subprocess.DEVNULL)
         glow = png + ".glow.png"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", png, "-filter_complex",
-                        glow_filter(h, "rgb24"), "-map", "[out]", glow], check=True)
+                        glow_filter(h, "rgb24", args.glow == "strong"), "-map", "[out]", glow],
+                       check=True)
         os.replace(glow, png)
         print(f"wrote      {png}")
         return 0
