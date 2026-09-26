@@ -64,8 +64,12 @@ def find_blender(explicit=None):
             os.path.expanduser(r"~\AppData\Local\Programs\Blender Foundation\Blender *\blender.exe"),
             "/Applications/Blender.app/Contents/MacOS/Blender",
             "/usr/bin/blender", "/snap/bin/blender"]
+    found = []
     for pat in pats:
-        cands.extend(sorted(glob.glob(pat), reverse=True))
+        found.extend(sorted(glob.glob(pat), reverse=True))
+    # Blender 4.x first (newest 4.x first): see blender_major() below
+    found.sort(key=lambda c: 0 if re.search(r"Blender 4\.", c) else 1)
+    cands.extend(found)
     for c in cands:
         if c and os.path.isfile(c):
             return c
@@ -112,6 +116,19 @@ def device_note(line):
                 "card found, this will be very slow. Update the NVIDIA driver, then in "
                 "Blender: Edit > Preferences > System > Cycles Render Devices > OptiX.")
     return f"Blender {parts[1]}: standard look (EEVEE) on the graphics card"
+
+
+def blender_major(blender):
+    """Major version of a Blender executable, or None if it can't be read.
+    Blender 5 builds a volume map of every glowing gem before each frame,
+    which makes these scenes crawl; they are made for Blender 4.5 LTS."""
+    try:
+        out = subprocess.run([blender, "-b", "--factory-startup", "--version"],
+                             capture_output=True, text=True, timeout=120).stdout
+        m = re.search(r"Blender (\d+)\.", out)
+        return int(m.group(1)) if m else None
+    except (OSError, subprocess.SubprocessError):
+        return None
 
 
 def blender_args(s, extra):
@@ -265,8 +282,8 @@ def speed_test(s, frames=6):
     for label, sec in (("10-minute", 600), ("20-minute", 1200), ("1-hour", 3600),
                        ("3-hour", 10800)):
         print(f"  a {label:9s} video (or loop) would take about {fmt_ts(per * sec * s['fps'])}")
-    print("  (a looping video only renders the loop: a 20-minute loop makes a 3-hour"
-          " video in the 20-minute time)")
+    print("  (a looping video only renders the loop: with a 10-minute loop, the whole"
+          " 3-hour video takes the 10-minute time)")
     return 0
 
 
@@ -292,6 +309,7 @@ def main(argv=None):
     ap.add_argument("--chunk", type=float, default=60.0)
     ap.add_argument("--crf", type=int, default=18)
     ap.add_argument("--blender", default=None, help="path to blender(.exe)")
+    ap.add_argument("--allow-blender5", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--preview", type=float, default=None, metavar="T")
     ap.add_argument("--speed-test", action="store_true")
     ap.add_argument("--resume", action="store_true")
@@ -320,6 +338,14 @@ def main(argv=None):
     blender = find_blender(args.blender)
     if not blender:
         print("Blender was not found. Install Blender 4.5 LTS (free):")
+        print("https://www.blender.org/download/lts/")
+        return 1
+    major = blender_major(blender)
+    if major is not None and major >= 5 and not args.allow_blender5:
+        print(f"Found Blender {major} at {blender}")
+        print("These scenes render extremely slowly in Blender 5 (it builds a volume map")
+        print("of every glowing gem before each frame). Please install Blender 4.5 LTS")
+        print("(free, and it can be installed next to Blender 5):")
         print("https://www.blender.org/download/lts/")
         return 1
     m = re.fullmatch(r"(\d+)x(\d+)", args.resolution.lower())

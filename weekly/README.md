@@ -32,8 +32,9 @@ One custom 3D video per week, each in its own folder:
 
 ## Requirements
 
-- **Blender 4.5 LTS** (free): https://www.blender.org/download/lts/ — the
-  scenes are tested on Blender 4.0, 4.5 LTS and 5.0.
+- **Blender 4.5 LTS** (free): https://www.blender.org/download/lts/ — not
+  Blender 5, which renders the gems' glowing volumes extremely slowly (the
+  launchers pick 4.5 automatically when both are installed).
 - The PortalMachine setup already done (`setup.bat`), which provides Python
   and ffmpeg.
 - Blender renders on your graphics card automatically. On an NVIDIA RTX

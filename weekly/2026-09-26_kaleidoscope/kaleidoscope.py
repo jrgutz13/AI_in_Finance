@@ -1,6 +1,7 @@
 """3D Kaleidoscope — an endless flight down a tunnel of mirrored jewels.
 
-Render inside Blender (4.2 LTS or newer recommended; also runs on 4.0 and 5.x):
+Render inside Blender 4.5 LTS (also runs on 4.0; Blender 5 is very slow with the
+gems' glowing volumes):
 
     blender -b --factory-startup -P kaleidoscope.py -- --start 0 --end 240 \\
         --outdir frames --width 1920 --height 1080 --fps 24 --seed 1

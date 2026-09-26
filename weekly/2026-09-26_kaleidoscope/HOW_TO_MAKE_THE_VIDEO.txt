@@ -20,6 +20,9 @@ ONE-TIME SETUP
 3. Install Blender 4.5 LTS (free) from https://www.blender.org/download/lts/
    Use the normal Windows installer (.msi) and its default install location,
    so PortalMachine can find it automatically.
+   It must be 4.5, not Blender 5: this scene renders extremely slowly in
+   Blender 5. If you already have Blender 5, keep it and install 4.5 next to
+   it; PortalMachine picks 4.5 automatically.
 
 4. Update your NVIDIA graphics driver (GeForce Experience / NVIDIA App, or
    https://www.nvidia.com/drivers). Blender needs a recent driver to use your
