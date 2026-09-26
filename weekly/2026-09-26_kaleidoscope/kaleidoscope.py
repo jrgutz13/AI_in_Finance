@@ -46,7 +46,7 @@ import time
 
 import bpy
 import numpy as np
-from mathutils import Vector
+from mathutils import Quaternion, Vector
 
 TAU = 2.0 * math.pi
 SEG = 1.6            # distance between rings (Blender units)
@@ -54,6 +54,9 @@ RADIUS = 3.0         # tunnel radius
 VIEW = 42.0          # rings exist this far ahead (they are pitch black by then)
 FADE_NEAR, FADE_FAR = 7.0, 36.0   # full brightness -> black
 WALL_R = 3.55        # the geode wall: dark glossy stone lined with crystals
+CAM_WEAVE = 0.42     # real style: how far the camera drifts off the axis
+HAZE_DENSITY = 0.045 # real style: glowing mist (1/distance units)
+HAZE_GLOW = 0.009    # its emission; it settles at HAZE_GLOW / HAZE_DENSITY bright
 LENS_FADE = (0.15, 0.8)           # objects this close to the lens fade out
 SPEED = 0.95         # camera travel per second: a slow glide
 
@@ -844,6 +847,17 @@ class World:
             wn.links.new(bg.outputs["Background"], mix.inputs[1])
             wn.links.new(black.outputs["Background"], mix.inputs[2])
             wn.links.new(mix.outputs["Shader"], wn.nodes["World Output"].inputs["Surface"])
+            # aerial perspective: a faint glowing mist fills the tunnel, so
+            # distance dissolves into colored haze instead of plain black.
+            # Absorption + emission only (no scattering): a uniform medium
+            # Cycles integrates exactly, so it adds almost no render time.
+            ab = wn.nodes.new("ShaderNodeVolumeAbsorption")
+            ab.inputs["Density"].default_value = HAZE_DENSITY
+            self.haze = wn.nodes.new("ShaderNodeEmission")
+            add = wn.nodes.new("ShaderNodeAddShader")
+            wn.links.new(ab.outputs[0], add.inputs[0])
+            wn.links.new(self.haze.outputs[0], add.inputs[1])
+            wn.links.new(add.outputs[0], wn.nodes["World Output"].inputs["Volume"])
 
         self.mats = {"jewel": mat_jewel_glass() if self.photoreal else mat_jewel(),
                      "crystal": (mat_jewel_glass("crystal", 1.55, 0.8) if self.photoreal
@@ -878,7 +892,7 @@ class World:
                 ld = bpy.data.lights.new(f"key{i}", "POINT")
                 ld.energy = 140.0
             setp(ld, "shadow_soft_size", 0.12)
-            setp(ld, "use_shadow", False)
+            setp(ld, "use_shadow", self.real)      # real style: shadows give weight and layering
             # stronger glints without flattening the facets with more fill light
             setp(ld, "specular_factor", 2.5)
             setp(ld, "diffuse_factor", 0.8)
@@ -903,11 +917,34 @@ class World:
         self.coll.objects.link(self.cam)
         scene.camera = self.cam
 
+    def wave(self, t, period, phase=0.0):
+        """A slow sine whose period divides the loop exactly (if looping)."""
+        if self.loop_time:
+            period = self.loop_time / max(1, round(self.loop_time / period))
+        return math.sin(TAU * t / period + phase)
+
     def update(self, t):
         y = self.speed * t
-        self.cam.location = (0.0, y, 0.0)
-        self.cam.rotation_euler = (math.pi / 2, 0.0, 0.0)    # look down the tunnel (+Y)
         colors, _ = self.journey.at(y + 8.0)
+        if self.real:
+            # a slow weave off the axis: near things slide past faster than
+            # far ones (parallax), while the camera keeps looking down the
+            # tunnel; a slight roll. Focus stays fixed.
+            cx = CAM_WEAVE * self.wave(t, 41.0, 0.7)
+            cz = CAM_WEAVE * self.wave(t, 29.0, 2.1)
+            self.cam.location = (cx, y, cz)
+            look = Vector((-0.35 * cx, 9.0, -0.35 * cz))
+            q = look.normalized().to_track_quat("-Z", "Z")
+            roll = 0.07 * self.wave(t, 53.0, 1.3)
+            q = q @ Quaternion((0.0, 0.0, 1.0), roll)
+            self.cam.rotation_mode = "QUATERNION"
+            self.cam.rotation_quaternion = q
+            haze = (colors[0] * 0.6 + colors[1] * 0.4) * HAZE_GLOW
+            self.haze.inputs["Color"].default_value = tuple(float(c) for c in haze) + (1.0,)
+            self.haze.inputs["Strength"].default_value = 1.0
+        else:
+            self.cam.location = (0.0, y, 0.0)
+            self.cam.rotation_euler = (math.pi / 2, 0.0, 0.0)    # look down the tunnel (+Y)
         for i, (ob, dx, dz) in enumerate(self.lights):
             ob.location = (dx, y + (1.2 if i % 2 else 3.2), dz)
             if self.photoreal:
