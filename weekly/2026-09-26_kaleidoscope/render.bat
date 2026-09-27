@@ -34,14 +34,13 @@ if "%DUR%"=="" set DUR=3h
 
 echo.
 echo Resolution?
-echo   1  1080p  (recommended)
-echo   2  1440p
-echo   3  4K     (about 4x slower than 1080p)
+echo   1  1080p fast   - rendered at 1600x900 and upscaled; a touch softer,
+echo                     about 30%% faster (recommended)
+echo   2  1080p sharp  - rendered at full 1920x1080
 set "RES="
-set /p RES="Choose 1-3 [press Enter for 1]: "
-set "RESARG=--resolution 1920x1080"
-if "%RES%"=="2" set "RESARG=--resolution 2560x1440"
-if "%RES%"=="3" set "RESARG=--resolution 3840x2160"
+set /p RES="Choose 1-2 [press Enter for 1]: "
+set "RESARG=--resolution 1920x1080 --render-scale 0.8333"
+if "%RES%"=="2" set "RESARG=--resolution 1920x1080"
 
 echo.
 set "LOOP="

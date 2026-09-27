@@ -76,7 +76,7 @@ def find_blender(explicit=None):
     return None
 
 
-def glow_filter(height, out_fmt="yuv420p", strong=False):
+def glow_filter(height, out_fmt="yuv420p", strong=False, pre=""):
     """Glow around bright things, keeping blacks black: only the highlights
     are blurred and screened back on (a tight halo and a wide one). Done in
     ffmpeg, identical on every Blender version."""
@@ -86,7 +86,7 @@ def glow_filter(height, out_fmt="yuv420p", strong=False):
     # strong: lower thresholds (more of the image blooms) and denser halos
     t1, t2, t3 = (0.38, 0.28, 0.30) if strong else (0.50, 0.40, 0.45)
     o1, o2, o3 = (1.0, 0.85, 0.6) if strong else (0.9, 0.6, 0.35)
-    return (f"[0:v]format=gbrp,split=4[a][b][c][d];"
+    return (f"[0:v]{pre}format=gbrp,split=4[a][b][c][d];"
             f"[b]curves=all='0/0 {t1}/0 1/1',gblur=sigma={s1:.2f}[g1];"
             f"[c]curves=all='0/0 {t2}/0 1/1',gblur=sigma={s2:.2f}[g2];"
             f"[d]curves=all='0/0 {t3}/0 1/0.8',gblur=sigma={s3:.2f}[g3];"
@@ -134,8 +134,8 @@ def blender_major(blender):
 def blender_args(s, extra):
     return ([s["blender"], "-b", "--factory-startup", "--python-exit-code", "1",
              "-P", s["scene"], "--",
-             "--seed", str(s["seed"]), "--width", str(s["width"]),
-             "--height", str(s["height"]), "--fps", str(s["fps"]),
+             "--seed", str(s["seed"]), "--width", str(s.get("rw") or s["width"]),
+             "--height", str(s.get("rh") or s["height"]), "--fps", str(s["fps"]),
              "--samples", str(s["samples"]), "--engine", s.get("engine", "cycles")]
             + (["--loop", str(s["loop"])] if s.get("loop") else [])
             + (["--style", s["style"]] if s.get("style") else []) + extra)
@@ -164,12 +164,19 @@ def encode_chunk(s, first, count, frames_dir, out_ts):
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(s["fps"]),
                     "-start_number", str(first), "-i", os.path.join(frames_dir, "f_%07d.jpg"),
                     "-frames:v", str(count), "-filter_complex",
-                    glow_filter(s["height"], strong=s.get("glow") == "strong"),
+                    glow_filter(s["height"], strong=s.get("glow") == "strong", pre=upscale(s)),
                     "-map", "[out]", "-c:v", "libx264", "-crf", str(s["crf"]),
                     "-preset", "slow", "-maxrate", f"{s['maxrate']}M",
                     "-bufsize", f"{2 * s['maxrate']}M", "-f", "mpegts", out_ts + ".part"],
                    check=True)
     os.replace(out_ts + ".part", out_ts)
+
+
+def upscale(s):
+    """ffmpeg step bringing a reduced-size render up to the output size."""
+    if s.get("rw") and (s["rw"], s["rh"]) != (s["width"], s["height"]):
+        return f"scale={s['width']}:{s['height']}:flags=lanczos,"
+    return ""
 
 
 def write_manifest(pdir, s, done):
@@ -301,7 +308,10 @@ def main(argv=None):
                     help="render one seamless loop of this length (e.g. 20m) and repeat "
                          "it to --duration: much faster")
     ap.add_argument("--samples", type=int, default=None,
-                    help="default: 48 for cycles (denoised), 16 for eevee")
+                    help="default: 20 for cycles (denoised), 16 for eevee")
+    ap.add_argument("--render-scale", type=float, default=1.0, metavar="F",
+                    help="render at F x the resolution and upscale (e.g. 0.8333: "
+                         "1080p rendered at 1600x900, ~30%% faster, slightly softer)")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--start-at", type=float, default=0.0, metavar="SEC")
     ap.add_argument("--audio", default=None)
@@ -360,7 +370,9 @@ def main(argv=None):
          "duration": args.duration, "width": w, "height": h, "fps": args.fps,
          "engine": args.engine, "style": args.style, "glow": args.glow,
          "loop": (args.loop if args.loop and args.loop < args.duration else None),
-         "samples": args.samples or (48 if args.engine == "cycles" else 16),
+         "samples": args.samples or (20 if args.engine == "cycles" else 16),
+         "rw": int(round(w * args.render_scale / 2)) * 2,
+         "rh": int(round(h * args.render_scale / 2)) * 2,
          "chunk": args.chunk, "crf": args.crf,
          "start_frame": int(round(args.start_at * args.fps)),
          "maxrate": auto_maxrate_mbps(w, h, args.fps),
@@ -368,7 +380,8 @@ def main(argv=None):
          "out": out, "parts_dir": out.rsplit(".", 1)[0] + "_parts"}
 
     if args.speed_test:
-        print(f"Speed test: {w}x{h} @ {args.fps} fps, {args.engine}  (Blender: {blender})")
+        rendered = f" (rendered at {s['rw']}x{s['rh']})" if (s["rw"], s["rh"]) != (w, h) else ""
+        print(f"Speed test: {w}x{h}{rendered} @ {args.fps} fps, {args.engine}  (Blender: {blender})")
         return speed_test(s)
     if args.preview is not None:
         png = out.rsplit(".", 1)[0] + f"_t{args.preview:.0f}.png"
@@ -376,7 +389,7 @@ def main(argv=None):
                        check=True, stdout=subprocess.DEVNULL)
         glow = png + ".glow.png"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", png, "-filter_complex",
-                        glow_filter(h, "rgb24", args.glow == "strong"), "-map", "[out]", glow],
+                        glow_filter(h, "rgb24", args.glow == "strong", upscale(s)), "-map", "[out]", glow],
                        check=True)
         os.replace(glow, png)
         print(f"wrote      {png}")
@@ -387,6 +400,8 @@ def main(argv=None):
     free = shutil.disk_usage(os.path.abspath("output")).free / 1e9
     print(f"video      {name}, {w}x{h} @ {args.fps} fps, {fmt_ts(args.duration)}, seed {seed}")
     print(f"look       {args.engine} ({s['samples']} samples)")
+    if (s["rw"], s["rh"]) != (w, h):
+        print(f"rendered   at {s['rw']}x{s['rh']}, upscaled to {w}x{h}")
     if s["loop"]:
         print(f"loop       {fmt_ts(s['loop'])} rendered once, repeated seamlessly to full length")
     print(f"blender    {blender}")

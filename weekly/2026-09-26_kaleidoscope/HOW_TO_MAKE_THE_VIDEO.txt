@@ -64,7 +64,7 @@ RENDER THE VIDEO
 10. In the same folder, double-click  render.bat  and answer:
 
       Video length ....................... press Enter  (3 hours)
-      Resolution ......................... press Enter  (1080p)
+      Resolution ......................... press Enter  (1080p fast)
       Seamless loop length ............... press Enter  (10 minutes)
       Music file ......................... drag your music file into the
                                            window and press Enter, or just
@@ -95,7 +95,8 @@ Press Enter (or Y) and it continues where it stopped.
 GOOD TO KNOW
 ------------
 
-- 4K is available in the resolution menu, but takes about 4 times longer.
+- "1080p fast" renders at 1600x900 and upscales: about 30% faster and only a
+  touch softer, which suits the lens look. "1080p sharp" renders every pixel.
 - The 10-second samples you approved are part of this exact video (same
   seed), so the full render looks like what you saw, but sharper (1080p,
   more samples).
