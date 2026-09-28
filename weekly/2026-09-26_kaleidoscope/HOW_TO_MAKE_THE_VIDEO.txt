@@ -70,8 +70,9 @@ RENDER THE VIDEO
                                            window and press Enter, or just
                                            press Enter for no sound
 
-    The music plays continuously underneath (it repeats if it is shorter
-    than 3 hours).
+    The music repeats back to back for the full 3 hours, exactly as the
+    track plays (no gaps added between repeats), and fades out over the
+    last 5 seconds of the video.
 
 11. Leave it running. The window shows progress and a time estimate (ETA).
     You can keep using the computer lightly, but it will be slow.

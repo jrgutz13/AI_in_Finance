@@ -250,7 +250,15 @@ def join(s, chunks):
                 f.write(f"file 'chunk_{i:05d}.ts'\n")
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listfile]
     if s.get("audio") and os.path.isfile(s["audio"]):
-        cmd += ["-stream_loop", "-1", "-i", s["audio"], "-map", "0:v", "-map", "1:a",
+        # decode the music once and loop the decoded audio: repeating an MP3
+        # directly can slip a few ms of encoder padding into every repeat.
+        # The track loops exactly as it plays; a 5 s fade-out ends the video.
+        wav = os.path.join(pdir, "music.wav")
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", s["audio"], "-vn",
+                        "-c:a", "pcm_s16le", wav], check=True)
+        fade = max(0.0, s["duration"] - 5.0)
+        cmd += ["-stream_loop", "-1", "-i", wav, "-map", "0:v", "-map", "1:a",
+                "-af", f"afade=t=out:st={fade:.3f}:d=5",
                 "-c:a", "aac", "-b:a", "192k", "-shortest"]
     else:
         cmd += ["-map", "0:v"]
