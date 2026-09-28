@@ -74,9 +74,10 @@ echo   6   Hyperdrive                16  Hypno Polygons
 echo   7   Liquid Marble             17  Vortex
 echo   8   Machine Dream (Refik)     18  Galaxy Dive
 echo   9   Data Wind (Refik)         19  Ripple Dive
-echo   10  Machine Bloom (Refik)     20  Mix of everything
+echo   10  Machine Bloom (Refik)     20  Neon Stars
+echo                                 21  Mix of everything
 set "STYLE="
-set /p STYLE="Choose 1-20 [press Enter for 1]: "
+set /p STYLE="Choose 1-21 [press Enter for 1]: "
 if "%STYLE%"=="" set STYLE=1
 
 set "SCENEARG="
@@ -99,6 +100,7 @@ if "%STYLE%"=="16" set "SCENEARG=--scenes nested_squares"
 if "%STYLE%"=="17" set "SCENEARG=--scenes vortex"
 if "%STYLE%"=="18" set "SCENEARG=--scenes galaxy_dive"
 if "%STYLE%"=="19" set "SCENEARG=--scenes ripple_dive"
+if "%STYLE%"=="20" set "SCENEARG=--scenes neon_stars"
 
 echo.
 echo Resolution?
