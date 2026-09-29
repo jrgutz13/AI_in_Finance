@@ -106,12 +106,13 @@ echo.
 echo Resolution?
 echo   1  1080p  (1920x1080 - fast, smaller files)
 echo   2  1440p  (2560x1440)
-echo   3  4K     (3840x2160 - sharpest, ~4x the render time of 1080p)
+echo   3  4K     (3840x2160 - sharpest, ~4x the render time of 1080p;
+echo                 uses the NVIDIA card's video encoder when available)
 set "RES="
 set /p RES="Choose 1-3 [press Enter for 1]: "
 set "RESARG=--resolution 1920x1080"
 if "%RES%"=="2" set "RESARG=--resolution 2560x1440"
-if "%RES%"=="3" set "RESARG=--resolution 3840x2160"
+if "%RES%"=="3" set "RESARG=--resolution 3840x2160 --codec auto"
 
 echo.
 set "MUSIC="

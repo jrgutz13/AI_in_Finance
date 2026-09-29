@@ -235,7 +235,7 @@ SCENES = {
             "neon_stars", "Neon Stars",
             speed=(0.75, 1.1),
             p1=(0.22, 0.32),       # star density
-            p2=(0.8, 1.3),         # glitter brightness
+            p2=(0.8, 1.3),         # nebula / galaxy brightness
             p3=(0.85, 1.15),       # glide speed
             p4=(0.0, 0.25),        # palette variation away from the neon set
             locked=("p1", "p3"),   # density (re-seeds stars), glide (scales time)

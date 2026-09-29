@@ -55,6 +55,20 @@ def write_chapters(clips, path):
             f.write(f"{fmt_ts(c.start)} {SCENES[c.scene].title}\n")
 
 
+def nvenc_works():
+    """True if ffmpeg can actually encode with NVIDIA's hardware encoder here
+    (the encoder being compiled in isn't enough: it needs the GPU and driver).
+    4K encoding on the CPU is the slow part of a 4K render; NVENC is many
+    times faster."""
+    try:
+        r = subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i",
+                            "color=black:s=1920x1080:d=0.2", "-c:v", "h264_nvenc",
+                            "-f", "null", "-"], capture_output=True, timeout=60)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         prog="portal-machine",
@@ -86,7 +100,8 @@ def main(argv=None):
     ap.add_argument("--clips", dest="continuous", action="store_false",
                     help="force the clip/crossfade montage even for one style")
     ap.add_argument("--codec", default="libx264",
-                    help="libx264 (default), or h264_nvenc / hevc_nvenc on NVIDIA")
+                    help="libx264 (default), h264_nvenc / hevc_nvenc on NVIDIA, or "
+                         "auto: NVIDIA's hardware encoder when it works, else libx264")
     ap.add_argument("--crf", type=int, default=20,
                     help="quality, lower = better/bigger (default 20)")
     ap.add_argument("--preset", default="medium",
@@ -158,6 +173,10 @@ def main(argv=None):
         ap.error("--continuous needs exactly one --scenes style")
 
     w, h = args.resolution
+    if args.codec == "auto":
+        args.codec = "h264_nvenc" if nvenc_works() else "libx264"
+        print(f"encoder    {args.codec}"
+              + ("  (NVIDIA hardware encoder)" if args.codec == "h264_nvenc" else ""))
     settings = {
         "seed": seed,
         "duration": args.duration,
