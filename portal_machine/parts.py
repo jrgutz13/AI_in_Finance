@@ -17,7 +17,7 @@ import os
 import shutil
 import subprocess
 
-from .renderer import encode
+from .renderer import decode_audio, encode, looped_audio_args
 
 MANIFEST = "manifest.json"
 
@@ -99,11 +99,11 @@ def join_parts(settings):
     audio = settings.get("audio")
     cmd = ["ffmpeg", "-y", "-loglevel", "error",
            "-f", "concat", "-safe", "0", "-i", listfile]
+    a_in, a_out = [], []
     if audio:
-        cmd += ["-stream_loop", "-1", "-i", audio]
-    cmd += ["-map", "0:v"]
-    if audio:
-        cmd += ["-map", "1:a", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+        wav = decode_audio(audio, os.path.join(pdir, "music.wav"))
+        a_in, a_out = looped_audio_args(wav, settings["duration"])
+    cmd += a_in + ["-map", "0:v"] + a_out
     cmd += ["-c:v", "copy"]
     # faststart makes ffmpeg rewrite the whole file through a temp copy at
     # the end — that needs ANOTHER final-file-sized chunk of disk on top of

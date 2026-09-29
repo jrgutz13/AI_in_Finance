@@ -2,6 +2,7 @@
 crossfades pairs of scenes in a composite pass, and pipes raw frames into
 ffmpeg for encoding."""
 
+import os
 import subprocess
 import sys
 import time
@@ -137,6 +138,24 @@ def auto_maxrate_mbps(width, height, fps):
     return max(6, round(width * height * fps * 0.16 / 1e6))
 
 
+def decode_audio(audio, wav_path):
+    """Decode the music once to WAV. Repeating an MP3 directly with
+    -stream_loop drops a few ms of encoder padding at every repeat (a tiny
+    click at each seam); the decoded audio repeats sample-exactly."""
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", audio, "-vn",
+                    "-c:a", "pcm_s16le", wav_path], check=True)
+    return wav_path
+
+
+def looped_audio_args(wav_path, duration, input_index=1):
+    """ffmpeg args that loop the decoded music under the whole video and fade
+    it out over the last 5 seconds instead of cutting mid-note."""
+    fade = max(0.0, duration - 5.0)
+    return (["-stream_loop", "-1", "-i", wav_path],
+            ["-map", f"{input_index}:a", "-af", f"afade=t=out:st={fade:.3f}:d=5",
+             "-c:a", "aac", "-b:a", "192k", "-shortest"])
+
+
 def encode(renderer, frame_fn, duration, fps, out_path, audio=None,
            codec="libx264", crf=20, preset="medium", maxrate_mbps=None,
            t_start=0.0, container="mp4", label="", quiet=False):
@@ -154,16 +173,14 @@ def encode(renderer, frame_fn, duration, fps, out_path, audio=None,
         if maxrate_mbps else []
     if container == "ts":
         audio = None
+    wav = decode_audio(audio, out_path + ".music.wav") if audio else None
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error",
         "-f", "rawvideo", "-pix_fmt", "rgb24",
         "-s", f"{w}x{h}", "-r", str(fps), "-i", "-",
     ]
-    if audio:
-        cmd += ["-stream_loop", "-1", "-i", audio]
-    cmd += ["-map", "0:v"]
-    if audio:
-        cmd += ["-map", "1:a", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+    a_in, a_out = looped_audio_args(wav, duration) if wav else ([], [])
+    cmd += a_in + ["-map", "0:v"] + a_out
     cmd += ["-c:v", codec]
     if codec == "libx264":
         cmd += ["-crf", str(crf), "-preset", preset] + cap
@@ -204,6 +221,8 @@ def encode(renderer, frame_fn, duration, fps, out_path, audio=None,
         except (BrokenPipeError, OSError):
             pass
         ret = proc.wait()
+        if wav and os.path.exists(wav):
+            os.remove(wav)
         if not quiet:
             sys.stderr.write("\n")
     if ret != 0:
