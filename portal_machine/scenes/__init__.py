@@ -234,7 +234,7 @@ SCENES = {
         SceneDef(
             "neon_stars", "Neon Stars",
             speed=(0.75, 1.1),
-            p1=(0.22, 0.32),       # star density
+            p1=(0.34, 0.46),       # star density
             p2=(0.8, 1.3),         # nebula / galaxy brightness
             p3=(0.85, 1.15),       # glide speed
             p4=(0.0, 0.25),        # palette variation away from the neon set

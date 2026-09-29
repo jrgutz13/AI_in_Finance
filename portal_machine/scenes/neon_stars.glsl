@@ -10,7 +10,7 @@
 // brand-new content (the cycle count feeds the hash), so the flight never
 // repeats. Integer hashes keep that exact for hours of video.
 
-const int   NL      = 12;      // star planes
+const int   NL      = 16;      // star planes
 const float D_FAR   = 7.0;     // plane distances (world units)
 const float D_NEAR  = 0.32;
 const float D_FOCUS = 2.4;     // focus distance: mid-distance stars are crisp
@@ -43,14 +43,15 @@ float sdStar5(vec2 p, float r, float rf) {
     return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
 }
 
-// the neon set from warm to cool, weighted towards golds like a party sky
+// psychedelic neon set: electric and saturated, evenly spread
 vec3 neon(float h) {
-    if (h < 0.26) return vec3(1.00, 0.78, 0.08);   // yellow
-    if (h < 0.42) return vec3(1.00, 0.50, 0.08);   // gold / orange
-    if (h < 0.55) return vec3(1.00, 0.30, 0.20);   // coral
-    if (h < 0.68) return vec3(1.00, 0.22, 0.45);   // pink
-    if (h < 0.85) return vec3(0.20, 0.70, 1.00);   // cyan
-    return vec3(0.85, 1.00, 0.45);                 // pale lime
+    if (h < 0.17) return vec3(1.00, 0.10, 0.80);   // electric magenta
+    if (h < 0.32) return vec3(0.62, 0.18, 1.00);   // violet
+    if (h < 0.46) return vec3(0.18, 0.38, 1.00);   // electric blue
+    if (h < 0.61) return vec3(0.08, 0.92, 1.00);   // cyan
+    if (h < 0.75) return vec3(0.45, 1.00, 0.12);   // acid green
+    if (h < 0.90) return vec3(1.00, 0.18, 0.45);   // hot pink
+    return vec3(1.00, 0.50, 0.05);                 // orange
 }
 
 vec3 starColor(float h, float h2) {
@@ -187,7 +188,7 @@ void main() {
             vec3 sc = starColor(h01(ux, uy, cyc, 7U), h01(ux, uy, cyc, 8U));
             float twinkle = 0.85 + 0.15 * sin(t * (0.8 + hs) + hs * 40.0);
             // far stars also recede into the dark (aerial perspective)
-            float far = mix(1.0, 0.45, smoothstep(2.0, D_FAR, D));
+            float far = mix(1.0, 0.32, smoothstep(2.0, D_FAR, D));
             col += fade * far * twinkle * energy * (sc * (tube * 2.2 + halo)
                                                     + vec3(1.0, 0.97, 0.9) * core * 0.6);
         }
