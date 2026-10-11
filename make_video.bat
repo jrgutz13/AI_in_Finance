@@ -125,9 +125,9 @@ REM running the replacement on an empty variable crashes the script)
 if defined MUSIC set "MUSIC=%MUSIC:"=%"
 
 if "%MUSIC%"=="" (
-    %PY% generate.py --duration %DUR% %RESARG% %SCENEARG%
+    %PY% generate.py --duration %DUR% --fps 24 %RESARG% %SCENEARG%
 ) else (
-    %PY% generate.py --duration %DUR% %RESARG% %SCENEARG% --audio "%MUSIC%"
+    %PY% generate.py --duration %DUR% --fps 24 %RESARG% %SCENEARG% --audio "%MUSIC%"
 )
 
 if errorlevel 1 (

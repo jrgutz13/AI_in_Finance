@@ -183,7 +183,7 @@ space, and stops (or asks first) if the video might not fit.
 | `--clips` | force the clip/crossfade montage even for a single style |
 | `--crossfade 0` | hard cuts between clips instead of 1s crossfades |
 | `--speed-scale 0.5` | slow every scene down (0.5 = half speed, 2 = double) |
-| `--fps 60` | smoother motion (doubles render time) |
+| `--fps 60` | smoother motion (doubles render time); `make_video.bat` uses 24 |
 | `--still 95` | render a single PNG frame at t=95s to preview a seed quickly |
 | `--codec h264_nvenc` | GPU encoding on NVIDIA — recommended for 4K |
 
