@@ -90,9 +90,11 @@ class Renderer:
         prog = self.programs[scene]
         prog["u_resolution"] = (float(self.width), float(self.height))
         prog["u_time"] = local_time
-        a, b, c, d = palette
-        prog["u_colA"], prog["u_colB"] = a, b
-        prog["u_colC"], prog["u_colD"] = c, d
+        # shaders with their own color scheme don't use the palette, and GLSL
+        # drops unused uniforms: only set the ones that exist
+        for name, value in zip(("u_colA", "u_colB", "u_colC", "u_colD"), palette):
+            if name in prog:
+                prog[name] = value
         for key in ("speed", "p1", "p2", "p3", "p4"):
             # GLSL drops uniforms a shader doesn't use; skip those
             if "u_" + key in prog:

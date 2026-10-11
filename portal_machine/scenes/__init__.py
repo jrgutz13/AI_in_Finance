@@ -240,6 +240,15 @@ SCENES = {
             p4=(0.0, 0.25),        # palette variation away from the neon set
             locked=("p1", "p3"),   # density (re-seeds stars), glide (scales time)
         ),
+        SceneDef(
+            "neon_star_tunnel", "Neon Star Tunnel",
+            speed=(0.8, 1.1),
+            p1=(0.8, 1.4),         # how much the tunnel winds
+            p2=(-1.0, 1.0),        # twist along the tunnel
+            p3=(0.85, 1.15),       # fly speed
+            p4=(0.6, 1.4),         # color spread along the tunnel
+            locked=("p3",),        # fly speed (scales time)
+        ),
     ]
 }
 
