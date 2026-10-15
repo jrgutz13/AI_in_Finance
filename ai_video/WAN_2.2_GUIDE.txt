@@ -23,21 +23,22 @@ menus may move a little in later versions.
 
 2. INSTALL (one time)
 ---------------------
-1. Go to https://github.com/deepbeepmeep/Wan2GP
-   Click the green "Code" button > "Download ZIP". Unzip it somewhere with
-   plenty of space, e.g. C:\Wan2GP  (a short path, no spaces is best).
-2. Open the folder, go into "scripts" and double-click  install.bat
-   Choose "Auto Install". It downloads Python, PyTorch and everything else.
-   This takes a while; let it finish.
-3. Start the app: double-click  scripts\run.bat
-   It opens in your web browser (if not, open the address it prints, usually
-   http://localhost:7860).
-   Tip: to open the browser automatically every time, create a text file
-   scripts\args.txt containing:   --open-browser
+EASY WAY: in PortalMachine's  ai_video  folder, double-click  install_wan.bat
+- Press Enter to install into C:\Wan2GP (or type another folder, e.g.
+  D:\Wan2GP if C: is short on space).
+- It downloads Wan2GP, then starts Wan2GP's own installer. When it asks:
+    choose  1  (Automatic Install)
+    if it offers to install Git or Python, answer  Y
+  When the install finishes, choose  3  (Exit).
+- From then on, start Wan2GP by double-clicking  start_wan.bat  (same
+  folder). It opens in your web browser (usually http://localhost:7860).
+  Leave its black window open while you use it.
 
-(Alternative installer: Pinokio, https://pinokio.computer, with the community
-"wan2gp" script. The official install.bat above is the simplest route.)
-
+MANUAL WAY (same result):
+1. Go to https://github.com/deepbeepmeep/Wan2GP , green "Code" button >
+   "Download ZIP", unzip to e.g. C:\Wan2GP (short path, no spaces).
+2. Double-click  scripts\install.bat , choose "Automatic Install".
+3. Start it with  scripts\run.bat .
 
 3. ONE-TIME SETTINGS FOR A 6 GB CARD
 ------------------------------------
