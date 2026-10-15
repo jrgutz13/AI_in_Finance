@@ -102,6 +102,12 @@ from `common.glsl`; four generic uniforms `u_p1..u_p4` carry the randomness.
 Custom 3D videos made one per week live in `weekly/` — each week's folder has a
 `render.bat` for the full video and a `speed_test.bat`. See `weekly/README.md`.
 
+## AI video clips (Wan 2.2)
+
+How to make AI video clips on your own computer with the free Wan 2.2 model
+(prompt in, video out), plus prompt ideas: `ai_video/WAN_2.2_GUIDE.txt`.
+The Clip Stitcher below joins the clips into longer videos.
+
 ## Clip Stitcher (long videos from short clips and images)
 
 AI video generators make clips of 5-20 seconds. The stitcher turns a

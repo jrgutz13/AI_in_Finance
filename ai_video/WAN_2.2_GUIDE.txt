@@ -1,0 +1,139 @@
+MAKING AI VIDEO CLIPS WITH WAN 2.2 TI2V 5B (on your RTX 3060 laptop)
+====================================================================
+
+What this gives you: type a prompt, get a 720p video clip (5 seconds per
+"window", or longer by chaining windows automatically). Wan 2.2 is released
+under the Apache 2.0 license, so the clips are free to use on a monetized
+channel.
+
+App used: WanGP ("Wan2GP", by deepbeepmeep), a free app made for running Wan on
+low-memory graphics cards. Instructions written for WanGP v18 (October 2026);
+menus may move a little in later versions.
+
+
+1. WHAT YOU NEED
+----------------
+- Your RTX 3060 Laptop GPU (6 GB): works, but it is the minimum, so it is slow.
+- System RAM: 16 GB minimum, 32 GB much better (the app parks parts of the
+  model in normal RAM to fit the 6 GB card).
+- Free disk space: about 60 GB (app, Python, models).
+- An up-to-date NVIDIA driver.
+- Keep the laptop plugged in, on a hard surface, vents clear.
+
+
+2. INSTALL (one time)
+---------------------
+1. Go to https://github.com/deepbeepmeep/Wan2GP
+   Click the green "Code" button > "Download ZIP". Unzip it somewhere with
+   plenty of space, e.g. C:\Wan2GP  (a short path, no spaces is best).
+2. Open the folder, go into "scripts" and double-click  install.bat
+   Choose "Auto Install". It downloads Python, PyTorch and everything else.
+   This takes a while; let it finish.
+3. Start the app: double-click  scripts\run.bat
+   It opens in your web browser (if not, open the address it prints, usually
+   http://localhost:7860).
+   Tip: to open the browser automatically every time, create a text file
+   scripts\args.txt containing:   --open-browser
+
+(Alternative installer: Pinokio, https://pinokio.computer, with the community
+"wan2gp" script. The official install.bat above is the simplest route.)
+
+
+3. ONE-TIME SETTINGS FOR A 6 GB CARD
+------------------------------------
+Open the "Configuration" tab:
+- Performance > Attention: choose "Sage2" (or "Sage2+") if offered. Your RTX
+  30-series card supports it and it is much faster. If generation errors
+  out, switch to "SDPA".
+- Performance > Attention Head Split: "Medium" (saves VRAM).
+- RAM/VRAM Management > Memory profile: "Profile 4".
+  If you get "out of memory" errors, use "Profile 5" (the failsafe).
+  Turn on "Smart Memory Pinning" if you have 32 GB of RAM.
+- Save, and restart the app if it asks.
+
+Before each generation, close Chrome or other heavy apps: they use graphics
+memory. WanGP includes scripts\start-chrome-no-gpu.bat to run Chrome without
+the GPU if you need a browser open.
+
+
+4. YOUR FIRST CLIP (do this test first)
+---------------------------------------
+1. Model dropdown: "Wan 2.2 TI2V 5B".
+2. Resolution: start with a smaller size (e.g. 832x480) for the first test,
+   to make sure everything works and to see the speed.
+3. Number of Frames: 121  (= 5 seconds at 24 fps; Wan frame counts are
+   4 x N + 1, so 121, 241, ...).
+4. Leave Steps and the rest at their defaults.
+5. Type a prompt (see section 6) and click Generate.
+6. When the test works: switch to 720p (1280x704) for real clips.
+
+Expect it to be slow on a laptop: from many minutes to around an hour per
+5-second 720p clip (rough guess - your first run tells you the real time).
+WanGP shows progress while it works. Finished videos are saved in its
+"outputs" folder.
+
+
+5. LONGER CLIPS (e.g. 30 seconds) WITH SLIDING WINDOWS
+------------------------------------------------------
+WanGP can chain windows automatically: each window continues from the end
+of the previous one, so it plays as one continuous shot.
+1. Set "Number of Frames" to the total length you want.
+2. In the sliding window settings:
+   - Window Size: 121 (5 seconds, what the model is trained on)
+   - Overlap Frames: 17 (frames shared between windows; more = smoother
+     joins but slower; too many can carry blur forward)
+   - Discard Last Frames: 0 (raise it to 4-8 if window endings look blurry)
+3. Length formula:
+   total frames = (windows - 1) x (Window Size - Overlap - Discard) + Window Size
+   With 121 / 17 / 0, each extra window adds 104 frames (4.3 s):
+       6 windows = 641 frames = 26.7 s
+       7 windows = 745 frames = 31.0 s   <- about 30 seconds
+4. Prompt: one line = one prompt used for every window (most consistent).
+   You can also write several lines to change the scene window by window
+   (see "How to Process each Line of the Text Prompt").
+5. Time: 7 windows = roughly 7 x the time of one clip. Run it overnight.
+6. Expect the look to slowly drift over many windows. For psychedelic
+   visuals that is often a bonus; keep the prompt the same for all windows
+   if you want it more consistent.
+
+
+6. PROMPTS FOR PSYCHEDELIC CLIPS
+--------------------------------
+Describe, in this order: the subject, how it moves, the camera, the light,
+the style. Be specific and visual.
+
+Examples:
+- Flying slowly through an endless tunnel of glowing neon fractal geometry,
+  magenta and cyan light pulsing along the walls, smooth forward camera
+  motion, deep black background, bioluminescent glow, ultra detailed, 4k,
+  cinematic.
+- A giant translucent lotus flower slowly unfolding in deep space, its
+  petals made of liquid rainbow light, tiny stars drifting past, slow
+  camera push in, soft volumetric glow, dreamlike, psychedelic art.
+- Macro shot of iridescent liquid ink swirling and blooming in slow
+  motion, violet, gold and teal colors mixing into fractal patterns,
+  black background, shallow depth of field, hypnotic.
+- Kaleidoscopic mandala of crystal and gold rotating slowly, light
+  refracting through faceted gems, symmetrical, glowing neon colors,
+  deep black background, meditative, highly detailed.
+
+Negative prompt (things to avoid; paste into the negative prompt box):
+  blurry, low quality, distorted, text, watermark, logo, people, faces,
+  flicker, jpeg artifacts
+
+Tips:
+- Words like "slow", "smooth", "gently" give calmer, steadier motion.
+- "deep black background" keeps the rich blacks your channel uses.
+- Avoid people and faces: that's where AI video looks most "off".
+
+
+7. AFTER GENERATING
+-------------------
+- WanGP may offer post-processing (upscaling, frame interpolation) - check
+  its options to sharpen 720p clips or make motion smoother.
+- To join several clips into a longer video with your music, use
+  PortalMachine's  stitch_clips.bat  (drag in the folder of clips).
+- YouTube asks creators to disclose realistic AI-generated content (things
+  that look like real people, places or events). Clearly abstract/psychedelic
+  art usually doesn't need the label, but check YouTube's current policy
+  when uploading.
