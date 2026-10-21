@@ -151,6 +151,16 @@ after it, then joins all parts into the final MP4 — identical to what an
 uninterrupted render would have produced. `--part-length 0` disables
 part rendering if you ever want a single-pass render.
 
+## Adding music to a finished video
+
+Rendered a video without music, or want a different track? Drag the video
+onto **`add_music.bat`** (it then asks for the music file - or drag both onto
+it together), or run `python3 add_music.py "output/portal_12345.mp4" music.mp3`.
+It takes minutes even for 3 hours, because the picture is copied as-is, not
+re-rendered. The music repeats back to back for the whole video and fades out
+over the last 5 seconds (`--fade 0` to end without a fade); any sound already
+in the video is replaced. Saved next to the video as `..._music.mp4`.
+
 ## Reversing a finished video
 
 If a render came out flying the wrong way, you don't have to re-render it.
