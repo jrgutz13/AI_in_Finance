@@ -249,6 +249,15 @@ SCENES = {
             p4=(0.6, 1.4),         # color spread along the tunnel
             locked=("p3",),        # fly speed (scales time)
         ),
+        SceneDef(
+            "halloween_tunnel", "Halloween Pumpkin Tunnel",
+            speed=(0.8, 1.1),
+            p1=(0.8, 1.4),         # how much the tunnel winds
+            p2=(0.4, 1.0),         # how much the pumpkins wobble
+            p3=(0.85, 1.15),       # fly speed
+            p4=(0.6, 1.4),         # color spread along the tunnel
+            locked=("p3",),        # fly speed (scales time)
+        ),
     ]
 }
 
