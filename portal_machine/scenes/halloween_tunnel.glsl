@@ -1,8 +1,9 @@
 // Halloween Tunnel: a spooky flight down an endless winding tunnel of glowing
-// neon pumpkin outlines in psychedelic colors. Scary jack-o'-lanterns with
-// flickering faces line the walls, bats flap across as black silhouettes
-// with red eyes, embers drift past, and a pale moon glows through the fog.
-// Pumpkins grow and sweep out past the frame as you fly through them.
+// neon jack-o'-lanterns in psychedelic colors: every ring is a pumpkin
+// outline carved with a scary face (angry eyes, jagged fanged grin). More
+// lanterns with flickering candle-lit faces line the walls, embers drift
+// past, and a pale moon glows through the fog. Pumpkins grow and sweep out
+// past the frame as you fly through them.
 // u_p1: how much the tunnel winds   u_p2: how much the pumpkins wobble
 // u_p3: fly speed (locked)          u_p4: color spread along the tunnel
 
@@ -51,44 +52,25 @@ float pumpkin(vec2 p) {
     return min(min(c, s), st);
 }
 
-// the curved ridge lines on the pumpkin's face (only drawn up close)
-float pumpkinRidges(vec2 p) {
-    return min(abs(sdEll(p - vec2(0.0, -0.05), vec2(0.24, 0.78))),
-               abs(sdEll(p - vec2(0.0, -0.05), vec2(0.60, 0.80))));
-}
-
-// scary jack-o'-lantern face: slanted angry eyes, a nose, and a jagged grin
-// with fangs hanging down and teeth pointing up
+// scary jack-o'-lantern face: slanted angry eyes, a nose, and a wide grin
+// with a jagged row of fangs hanging down and teeth pointing up
 float scaryFace(vec2 p) {
     vec2 q = vec2(abs(p.x), p.y);
     float eye = sdTri(rot(0.38) * (q - vec2(0.30, 0.20)), 0.16);
-    float nose = sdTri(vec2(p.x, -(p.y - 0.0)), 0.07);
-    float grin = max(sdEll(p - vec2(0.0, -0.33), vec2(0.55, 0.27)),
-                     -sdEll(p - vec2(0.0, -0.17), vec2(0.62, 0.22)));
-    float yTop = -0.17 - 0.22 * sqrt(max(0.0, 1.0 - (0.16 / 0.62) * (0.16 / 0.62)));
-    float fang = sdTri(vec2(q.x - 0.16, -(p.y - (yTop - 0.04))), 0.07);
-    float yBot0 = -0.60;
-    float yBot1 = -0.33 - 0.27 * sqrt(max(0.0, 1.0 - (0.32 / 0.55) * (0.32 / 0.55)));
-    float tooth = min(sdTri(vec2(p.x, p.y - (yBot0 + 0.035)), 0.06),
-                      sdTri(vec2(q.x - 0.32, p.y - (yBot1 + 0.035)), 0.055));
+    float nose = sdTri(vec2(p.x, -p.y), 0.07);
+    float grin = max(sdEll(p - vec2(0.0, -0.33), vec2(0.58, 0.29)),
+                     -sdEll(p - vec2(0.0, -0.15), vec2(0.66, 0.22)));
+    // fangs: every 0.2 across, hanging from the grin's upper edge
+    float fx = p.x - 0.1;
+    float fc = (floor(fx / 0.2) + 0.5) * 0.2 + 0.1;       // this fang's center x
+    float yTop = -0.15 - 0.22 * sqrt(max(0.0, 1.0 - (fc / 0.66) * (fc / 0.66)));
+    float fang = abs(fc) < 0.45 ? sdTri(vec2(p.x - fc, -(p.y - (yTop - 0.035))), 0.075) : 1.0;
+    // teeth: offset half a step, pointing up from the lower edge
+    float tc = (floor(p.x / 0.2) + 0.5) * 0.2;
+    float yBot = -0.33 - 0.29 * sqrt(max(0.0, 1.0 - (tc / 0.58) * (tc / 0.58)));
+    float tooth = abs(tc) < 0.36 ? sdTri(vec2(p.x - tc, p.y - (yBot + 0.035)), 0.065) : 1.0;
     grin = max(grin, -min(fang, tooth));
     return min(min(eye, nose), grin);
-}
-
-// bat silhouette, wingspan about 2 units; flap = wing angle
-float bat(vec2 p, float flap) {
-    vec2 q = vec2(abs(p.x), p.y);
-    float body = sdEll(q - vec2(0.0, -0.05), vec2(0.11, 0.22));
-    float head = length(q - vec2(0.0, 0.19)) - 0.10;
-    float ear = sdTri(q - vec2(0.065, 0.30), 0.045);
-    vec2 sh = vec2(0.08, 0.08);                         // shoulder
-    vec2 w = rot(flap) * (q - sh) + sh;
-    float wing = sdEll(w - vec2(0.52, 0.06), vec2(0.48, 0.20));
-    float scallop = min(min(length(w - vec2(0.30, -0.17)) - 0.11,
-                            length(w - vec2(0.55, -0.16)) - 0.11),
-                        length(w - vec2(0.80, -0.12)) - 0.10);
-    wing = max(wing, -scallop);
-    return min(min(body, head), min(ear, wing));
 }
 
 // ---- scene ------------------------------------------------------------------
@@ -178,15 +160,26 @@ void main() {
         // --- the neon pumpkin ring ---
         float lw = length(uv - c) * d;              // world units from the center
         float m = 4.0 * (0.02 * d + 0.042);         // where the glow becomes negligible
-        bool ridges = d < 7.0;
+        // the carved face sits within 0.72 of the center; faces fade out far
+        // away so the end of the tunnel stays clean
+        // every 4th pumpkin is carved, so faces come by one at a time
+        // (the face fades as you pass through it: its lines would otherwise
+        // swell into huge bands across the screen in the last few frames)
+        float faceFade = (mod(k, 4.0) < 0.5 ? 1.0 : 0.0) * (1.0 - smoothstep(8.0, 13.0, d))
+                       * smoothstep(0.35, 1.0, d);
         float dist = max(max(lw - R, 0.66 * R - lw), 0.0) / d;
-        float rdist = 1e3;
-        if (lw < R + m && (ridges || lw > 0.66 * R - m)) {
+        float fdist = 1e3, fin = 0.0;
+        bool needSil = lw < R + m && lw > 0.66 * R - m;
+        bool needFace = faceFade > 0.0 && lw < 0.72 * R + m;
+        if (needSil || needFace) {
             float ang = 0.14 * u_p2 * sin(0.35 * k + 0.25 * t);   // gentle wobble
             vec2 p = rot(ang) * (uv - c) * d;       // world units in the ring's plane
-            float sil = pumpkin(p);
-            dist = abs(sil) / d;
-            if (ridges && sil < 0.0) rdist = pumpkinRidges(p) / d;
+            if (needSil) dist = abs(pumpkin(p)) / d;
+            if (needFace) {
+                float f = scaryFace(p);
+                fdist = abs(f) / d;
+                fin = 1.0 - smoothstep(-px * d, px * d, f);     // inside the carving
+            }
         }
         float th = 0.03 / d;                        // tube half-width on screen
         float blur = 0.005 * smoothstep(8.0, FAR, d);
@@ -200,12 +193,15 @@ void main() {
         col += fade * atten * rc * haze;
         col += fade * atten * (rc * (tube * 1.6 * energy + halo * min(1.0, 4.0 * th / 0.03))
                                + vec3(1.0, 0.95, 0.9) * core * energy * 0.8);
-        if (rdist < 1e2) {                          // ridge lines, fading in up close
-            // only at mid distance: up close they'd become big bars on screen
-            float rw = max(0.45 * th, 0.6 * px);
-            float rf = smoothstep(7.0, 4.0, d) * smoothstep(1.6, 3.0, d);
-            col += fade * rf * rc * ((1.0 - smoothstep(rw - px, rw + px, rdist)) * 0.55
-                                     + exp(-rdist / (0.004 + 0.5 * rw)) * 0.2);
+        if (faceFade > 0.0 && fdist < 1e2) {        // the carved face, same neon tube
+            float fw = max(0.8 * th, 0.6 * px) + blur;
+            float fe = 0.8 * th / fw;
+            vec3 fc = mix(rc, vec3(1.0, 0.75, 0.2), 0.25);
+            col += fade * atten * faceFade
+                 * (fc * ((1.0 - smoothstep(fw - px, fw + px, fdist)) * 1.3 * fe
+                          + exp(-fdist / (0.004 + 0.4 * th)) * 0.35)
+                    + vec3(1.0, 0.95, 0.9) * (1.0 - smoothstep(0.0, 0.45 * fw + px, fdist)) * fe * 0.7
+                    + vec3(1.0, 0.55, 0.08) * fin * 0.10);   // faint candle glow inside
         }
 
         // --- embers drifting past ---
@@ -233,50 +229,31 @@ void main() {
             }
         }
 
-        // --- a jack-o'-lantern on the wall, or a bat in the tunnel ---
-        if (h01(kk, 7U, 1U) < 0.55) {
-            bool lantern = h01(kk, 7U, 2U) < 0.55;
+        // --- a jack-o'-lantern on the wall ---
+        if (h01(kk, 7U, 1U) < 0.35) {
             float ho = h01(kk, 7U, 3U);
-            float a, rr, s;
-            if (lantern) {
-                a = ho * TAU;
-                rr = R * (1.2 + 0.35 * h01(kk, 7U, 4U));
-                s = 0.24 + 0.10 * h01(kk, 7U, 5U);
-            } else {                                // bats circle inside the tunnel
-                a = ho * TAU + t * (0.25 + 0.3 * h01(kk, 7U, 5U)) * (ho < 0.5 ? 1.0 : -1.0);
-                rr = R * (0.30 + 0.55 * h01(kk, 7U, 4U)) + 0.05 * sin(t * 1.3 + ho * 20.0);
-                s = 0.26 + 0.14 * h01(kk, 7U, 5U);
-            }
+            float a = ho * TAU;
+            float rr = R * (1.2 + 0.35 * h01(kk, 7U, 4U));
+            float s = 0.24 + 0.10 * h01(kk, 7U, 5U);
             float zo = zk + (h01(kk, 7U, 6U) - 0.5) * S * 0.8;
             float dz = zo - zc;
             if (dz > 0.12) {
                 vec2 op = (q + rr * vec2(cos(a), sin(a))) / dz - look;
-                vec2 pl = (uv - op) * dz / s;       // object's own units (about +-1)
+                vec2 pl = (uv - op) * dz / s;       // lantern's own units (about +-1)
                 if (length(pl) < 2.2) {
                     float pxu = px * dz / s;
                     float fo = smoothstep(0.12, 0.3, dz) * (1.0 - smoothstep(FAR * 0.45, FAR * 0.75, dz))
                              * (0.3 + 0.7 * exp(-dz / 10.0));
-                    if (lantern) {
-                        float sil = pumpkin(pl);
-                        float body = 1.0 - smoothstep(-pxu, pxu, sil);
-                        col *= 1.0 - 0.8 * body * fo;           // solid: hides what's behind
-                        float face = scaryFace(pl);
-                        float faceIn = (1.0 - smoothstep(-pxu, pxu, face)) * body;
-                        float fl = 0.75 + 0.25 * sin(t * 13.0 + ho * 50.0) * sin(t * 7.3 + ho * 20.0);
-                        col += fo * (vec3(1.0, 0.36, 0.03) * (body * 0.08 + exp(-abs(sil) / (0.05 + pxu)) * 0.5)
-                                     + vec3(1.0, 0.72, 0.18) * faceIn * 1.8 * fl
-                                     + vec3(1.0, 0.45, 0.06) * exp(-max(face, 0.0) / 0.1) * body * 0.3 * fl
-                                     + vec3(1.0, 0.35, 0.04) * exp(-max(sil, 0.0) / 0.35) * 0.08 * fl);
-                    } else {
-                        float flap = 0.55 * sin(t * 7.0 + ho * 30.0);
-                        float b = bat(pl, flap);
-                        float fill = 1.0 - smoothstep(-pxu, pxu, b);
-                        col *= 1.0 - 0.95 * fill * fo;          // black silhouette
-                        col += fo * vec3(0.60, 0.18, 1.0) * (exp(-abs(b) / (0.02 + pxu)) * 0.9
-                                                             + exp(-max(b, 0.0) / 0.12) * 0.12);
-                        float e = length(vec2(abs(pl.x) - 0.045, pl.y - 0.21));
-                        col += fo * vec3(1.0, 0.05, 0.02) * exp(-e * e / (0.0006 + pxu * pxu)) * 1.6;
-                    }
+                    float sil = pumpkin(pl);
+                    float body = 1.0 - smoothstep(-pxu, pxu, sil);
+                    col *= 1.0 - 0.8 * body * fo;           // solid: hides what's behind
+                    float face = scaryFace(pl);
+                    float faceIn = (1.0 - smoothstep(-pxu, pxu, face)) * body;
+                    float fl = 0.75 + 0.25 * sin(t * 13.0 + ho * 50.0) * sin(t * 7.3 + ho * 20.0);
+                    col += fo * (vec3(1.0, 0.36, 0.03) * (body * 0.08 + exp(-abs(sil) / (0.05 + pxu)) * 0.5)
+                                 + vec3(1.0, 0.72, 0.18) * faceIn * 1.8 * fl
+                                 + vec3(1.0, 0.45, 0.06) * exp(-max(face, 0.0) / 0.1) * body * 0.3 * fl
+                                 + vec3(1.0, 0.35, 0.04) * exp(-max(sil, 0.0) / 0.35) * 0.08 * fl);
                 }
             }
         }
