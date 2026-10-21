@@ -159,7 +159,7 @@ void main() {
 
         // --- the neon pumpkin ring ---
         float lw = length(uv - c) * d;              // world units from the center
-        float m = 4.0 * (0.02 * d + 0.042);         // where the glow becomes negligible
+        float m = 3.5 * (0.04 * d + 0.10);          // where the glow becomes negligible
         // the carved face sits within 0.72 of the center; faces fade out far
         // away so the end of the tunnel stays clean
         // every 4th pumpkin is carved, so faces come by one at a time
@@ -187,21 +187,22 @@ void main() {
         float energy = th / w;
         float tube = 1.0 - smoothstep(w - px, w + px, dist);
         float core = 1.0 - smoothstep(0.0, 0.45 * w + px, dist);
-        float halo = exp(-dist / (0.004 + 0.5 * th)) * 0.55
-                   + exp(-dist / (0.02 + 1.5 * th)) * 0.10;
-        float haze = exp(-abs(lw - 0.85 * R) / d / (0.05 + min(3.0 * th, 0.25))) * 0.035;
+        float halo = exp(-dist / (0.006 + 0.7 * th)) * 1.0
+                   + exp(-dist / (0.04 + 3.3 * th)) * 0.45;
+        float haze = exp(-abs(lw - 0.85 * R) / d / (0.07 + min(4.0 * th, 0.35))) * 0.09;
         col += fade * atten * rc * haze;
         col += fade * atten * (rc * (tube * 1.6 * energy + halo * min(1.0, 4.0 * th / 0.03))
-                               + vec3(1.0, 0.95, 0.9) * core * energy * 0.8);
+                               + vec3(1.0, 0.95, 0.9) * core * energy * 1.0);
         if (faceFade > 0.0 && fdist < 1e2) {        // the carved face, same neon tube
             float fw = max(0.8 * th, 0.6 * px) + blur;
             float fe = 0.8 * th / fw;
             vec3 fc = mix(rc, vec3(1.0, 0.75, 0.2), 0.25);
             col += fade * atten * faceFade
                  * (fc * ((1.0 - smoothstep(fw - px, fw + px, fdist)) * 1.3 * fe
-                          + exp(-fdist / (0.004 + 0.4 * th)) * 0.35)
+                          + exp(-fdist / (0.006 + 0.6 * th)) * 0.8
+                          + exp(-fdist / (0.03 + 2.5 * th)) * 0.3)
                     + vec3(1.0, 0.95, 0.9) * (1.0 - smoothstep(0.0, 0.45 * fw + px, fdist)) * fe * 0.7
-                    + vec3(1.0, 0.55, 0.08) * fin * 0.10);   // faint candle glow inside
+                    + vec3(1.0, 0.55, 0.08) * fin * 0.16);   // candle glow inside
         }
 
         // --- embers drifting past ---
@@ -224,8 +225,8 @@ void main() {
                 float fp = smoothstep(0.04, 0.15, dz) * (1.0 - smoothstep(FAR * 0.6, FAR, dz))
                          * (0.25 + 0.75 * exp(-dz / 10.0));
                 vec3 ec = mix(vec3(1.0, 0.35, 0.03), vec3(1.0, 0.75, 0.2), hs);
-                col += ec * (exp(-dd * dd / (sz * sz)) * 1.3
-                             + exp(-dd / (2.5 * sz)) * 0.1) * flick * fp;
+                col += ec * (exp(-dd * dd / (sz * sz)) * 1.4
+                             + exp(-dd / (3.0 * sz)) * 0.2) * flick * fp;
             }
         }
 
@@ -250,10 +251,10 @@ void main() {
                     float face = scaryFace(pl);
                     float faceIn = (1.0 - smoothstep(-pxu, pxu, face)) * body;
                     float fl = 0.75 + 0.25 * sin(t * 13.0 + ho * 50.0) * sin(t * 7.3 + ho * 20.0);
-                    col += fo * (vec3(1.0, 0.36, 0.03) * (body * 0.08 + exp(-abs(sil) / (0.05 + pxu)) * 0.5)
-                                 + vec3(1.0, 0.72, 0.18) * faceIn * 1.8 * fl
-                                 + vec3(1.0, 0.45, 0.06) * exp(-max(face, 0.0) / 0.1) * body * 0.3 * fl
-                                 + vec3(1.0, 0.35, 0.04) * exp(-max(sil, 0.0) / 0.35) * 0.08 * fl);
+                    col += fo * (vec3(1.0, 0.36, 0.03) * (body * 0.10 + exp(-abs(sil) / (0.06 + pxu)) * 0.7)
+                                 + vec3(1.0, 0.72, 0.18) * faceIn * 2.2 * fl
+                                 + vec3(1.0, 0.45, 0.06) * exp(-max(face, 0.0) / 0.12) * body * 0.45 * fl
+                                 + vec3(1.0, 0.35, 0.04) * exp(-max(sil, 0.0) / 0.5) * 0.2 * fl);
                 }
             }
         }
