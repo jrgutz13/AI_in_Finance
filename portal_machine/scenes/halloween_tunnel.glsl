@@ -162,11 +162,10 @@ void main() {
         float m = 3.5 * (0.04 * d + 0.10);          // where the glow becomes negligible
         // the carved face sits within 0.72 of the center; faces fade out far
         // away so the end of the tunnel stays clean
-        // every 4th pumpkin is carved, so faces come by one at a time
-        // (the face fades as you pass through it: its lines would otherwise
-        // swell into huge bands across the screen in the last few frames)
-        float faceFade = (mod(k, 4.0) < 0.5 ? 1.0 : 0.0) * (1.0 - smoothstep(8.0, 13.0, d))
-                       * smoothstep(0.35, 1.0, d);
+        // every 4th pumpkin is carved; faces fade only far away. Up close they
+        // keep growing and sweep out past the frame (their line width is
+        // capped below so they stay crisp lines instead of swelling into bands)
+        float faceFade = (mod(k, 4.0) < 0.5 ? 1.0 : 0.0) * (1.0 - smoothstep(8.0, 13.0, d));
         float dist = max(max(lw - R, 0.66 * R - lw), 0.0) / d;
         float fdist = 1e3, fin = 0.0;
         bool needSil = lw < R + m && lw > 0.66 * R - m;
@@ -194,15 +193,17 @@ void main() {
         col += fade * atten * (rc * (tube * 1.6 * energy + halo * min(1.0, 4.0 * th / 0.03))
                                + vec3(1.0, 0.95, 0.9) * core * energy * 1.0);
         if (faceFade > 0.0 && fdist < 1e2) {        // the carved face, same neon tube
-            float fw = max(0.8 * th, 0.6 * px) + blur;
-            float fe = 0.8 * th / fw;
+            float fth = min(th, 0.02);                 // capped line thickness
+            float fw = max(0.8 * fth, 0.6 * px) + blur;
+            float fe = 0.8 * fth / fw;
             vec3 fc = mix(rc, vec3(1.0, 0.75, 0.2), 0.25);
             col += fade * atten * faceFade
                  * (fc * ((1.0 - smoothstep(fw - px, fw + px, fdist)) * 1.3 * fe
-                          + exp(-fdist / (0.006 + 0.6 * th)) * 0.8
-                          + exp(-fdist / (0.03 + 2.5 * th)) * 0.3)
+                          + exp(-fdist / (0.006 + 0.6 * fth)) * 0.8
+                          + exp(-fdist / (0.03 + 2.5 * fth)) * 0.3)
                     + vec3(1.0, 0.95, 0.9) * (1.0 - smoothstep(0.0, 0.45 * fw + px, fdist)) * fe * 0.7
-                    + vec3(1.0, 0.55, 0.08) * fin * 0.16);   // candle glow inside
+                    + vec3(1.0, 0.55, 0.08) * fin * 0.16    // candle glow inside, fading
+                      * smoothstep(0.5, 1.5, d));             // up close (no yellow tint)
         }
 
         // --- embers drifting past ---
