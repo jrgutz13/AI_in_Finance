@@ -161,8 +161,9 @@ re-rendered. The music repeats back to back for the whole video and fades out
 over the last 5 seconds (`--fade 0` to end without a fade); any sound already
 in the video is replaced. Saved next to the video as `..._music.mp4`.
 
-It also takes a **folder of songs**: they play back to back (gapless) and the
-whole playlist repeats for the length of the video. `--order "Song A;Song B"`
+It also takes a **folder of songs**: each song crossfades into the next
+(4 seconds; `--crossfade 6` for longer) and the whole playlist repeats for the
+length of the video, crossfading from the last song back into the first. `--order "Song A;Song B"`
 plays those first (partial names are fine), then the rest alphabetically.
 **`add_halloween_music.bat`** does this for the Halloween video with the
 `output\Halloween` songs in a set order.
