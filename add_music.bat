@@ -18,7 +18,7 @@ if not "%F1%"=="" goto :have_first
 set /p F1="Drag the VIDEO here, then press Enter: "
 :have_first
 if not "%F2%"=="" goto :have_both
-set /p F2="Drag the MUSIC file here, then press Enter: "
+set /p F2="Drag the MUSIC file (or a folder of songs) here, then press Enter: "
 :have_both
 set "F1=%F1:"=%"
 set "F2=%F2:"=%"
