@@ -22,7 +22,9 @@ void main() {
     for (int i = 0; i < RINGS; i++) {
         float fi = float(i);
         // each ring flies toward the camera, looping forever
-        float z = fract(fi / float(RINGS) + t * 0.18);
+        // (rings pass any point about 1.5-2.5 times a second: faster reads as
+        // strobing)
+        float z = fract(fi / float(RINGS) + t * 0.05);
         float dist = exp(mix(2.6, -1.2, z));   // far -> near
         vec2 p = uv * dist;
         p = rot(u_p2 * dist + t * u_p3 + fi * 0.05) * p;

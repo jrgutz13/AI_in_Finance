@@ -247,7 +247,9 @@ SCENES = {
             p2=(-1.0, 1.0),        # twist along the tunnel
             p3=(0.85, 1.15),       # fly speed
             p4=(0.6, 1.4),         # color spread along the tunnel
-            locked=("p3",),        # fly speed (scales time)
+            locked=("p3", "p4"),   # fly speed (scales time); color spread multiplies the
+                                   # ring number, which grows all video long: drifting it
+                                   # would make ring colors race (flicker) hours in
         ),
         SceneDef(
             "halloween_tunnel", "Halloween Pumpkin Tunnel",
@@ -256,7 +258,9 @@ SCENES = {
             p2=(0.4, 1.0),         # how much the pumpkins wobble
             p3=(0.85, 1.15),       # fly speed
             p4=(0.6, 1.4),         # color spread along the tunnel
-            locked=("p3",),        # fly speed (scales time)
+            locked=("p3", "p4"),   # fly speed (scales time); color spread multiplies the
+                                   # ring number, which grows all video long: drifting it
+                                   # would make ring colors race (flicker) hours in
         ),
     ]
 }

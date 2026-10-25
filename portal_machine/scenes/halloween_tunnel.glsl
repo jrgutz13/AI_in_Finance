@@ -113,7 +113,9 @@ void main() {
     float px = 1.0 / u_resolution.y;
     vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution) / u_resolution.y;
     float t = u_time * u_speed;
-    float zc = t * 1.6 * u_p3;                      // camera position along the tunnel
+    // camera position along the tunnel: a calm glide (pumpkins and faces pass
+    // at most about 1.4 per second)
+    float zc = t * 1.1 * u_p3;
 
     vec2 pc = path(zc);
     vec2 look = (path(zc + 3.0) - pc) / 3.0;        // aim a little ahead along the path
@@ -222,7 +224,7 @@ void main() {
                 float dd = length(uv - sp);
                 float sz = min(0.008 / dz, 0.03) + px;
                 float hs = h01(kk, jj, 4U);
-                float flick = 0.55 + 0.45 * sin(t * (5.0 + 6.0 * hs) + hs * 40.0);
+                float flick = 0.6 + 0.4 * sin(t * (2.0 + 3.0 * hs) + hs * 40.0);
                 float fp = smoothstep(0.04, 0.15, dz) * (1.0 - smoothstep(FAR * 0.6, FAR, dz))
                          * (0.25 + 0.75 * exp(-dz / 10.0));
                 vec3 ec = mix(vec3(1.0, 0.35, 0.03), vec3(1.0, 0.75, 0.2), hs);
@@ -251,7 +253,8 @@ void main() {
                     col *= 1.0 - 0.8 * body * fo;           // solid: hides what's behind
                     float face = scaryFace(pl);
                     float faceIn = (1.0 - smoothstep(-pxu, pxu, face)) * body;
-                    float fl = 0.75 + 0.25 * sin(t * 13.0 + ho * 50.0) * sin(t * 7.3 + ho * 20.0);
+                    // gentle candle flicker, slow enough to stay calm (about 1 Hz)
+                    float fl = 0.88 + 0.12 * sin(t * 5.0 + ho * 50.0) * sin(t * 2.3 + ho * 20.0);
                     col += fo * (vec3(1.0, 0.36, 0.03) * (body * 0.10 + exp(-abs(sil) / (0.06 + pxu)) * 0.7)
                                  + vec3(1.0, 0.72, 0.18) * faceIn * 2.2 * fl
                                  + vec3(1.0, 0.45, 0.06) * exp(-max(face, 0.0) / 0.12) * body * 0.45 * fl

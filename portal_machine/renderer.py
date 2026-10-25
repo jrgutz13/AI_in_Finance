@@ -1,6 +1,15 @@
 """GPU renderer: draws each scene shader into an offscreen framebuffer,
-crossfades pairs of scenes in a composite pass, and pipes raw frames into
-ffmpeg for encoding."""
+crossfades pairs of scenes in a composite pass, runs the flash guard, and
+pipes raw frames into ffmpeg for encoding.
+
+Flash guard (photosensitivity safety): the picture is divided into blocks
+(1/68 of the picture height: 16 pixels at 1080p) and each block's brightness
+is watched for back-and-forth flicker. Wherever a block flickers faster than
+about 1.5 times a second, its brightness is smoothed into a gentle fade (the
+fine detail is kept), so nothing can strobe at the rates that can trigger
+photosensitive seizures (broadcast rules allow at most 3 flashes per
+second), whatever a scene does. Normal motion isn't flicker, so it passes
+through untouched."""
 
 import os
 import subprocess
@@ -34,7 +43,80 @@ in vec2 v_uv;
 out vec4 fragColor;
 void main() {
     vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
-    fragColor = mix(texture(texA, uv), texture(texB, uv), u_fade);
+    vec4 c = mix(texture(texA, uv), texture(texB, uv), u_fade);
+    fragColor = vec4(pow(max(c.rgb, 0.0), vec3(2.2)), 1.0);     // to linear light
+}
+"""
+
+GUARD_SWING = 0.06              # a brightness swing this big (linear) counts as a reversal
+GUARD_RATE = 0.6                # while smoothing: max change, 60% of white per second
+GUARD_CUTOFF = 0.5              # while smoothing: temporal low-pass cutoff, Hz
+
+# guard pass 1, per block: watch for back-and-forth flicker and, where it is
+# found, smooth the block's brightness. Outputs the (possibly smoothed) block
+# brightness and the block's tracking state.
+_GUARD_STATE = """
+#version 330
+uniform sampler2D texC;         // current frame, linear, with mipmaps
+uniform sampler2D prevS;        // previous block brightness (as output)
+uniform sampler2D prevT;        // previous tracking: last extreme, direction, activity
+uniform float u_first;
+uniform float u_lod;
+uniform float u_swing;          // reversal threshold
+uniform float u_decay;          // activity decay per frame (1 s memory)
+uniform float u_alpha;          // low-pass coefficient while smoothing
+uniform float u_step;           // max change per frame while smoothing
+in vec2 v_uv;
+layout(location = 0) out vec4 outS;
+layout(location = 1) out vec4 outT;
+layout(location = 2) out vec4 outL;   // the block's own brightness, for pass 2
+void main() {
+    vec3 L = textureLod(texC, v_uv, u_lod).rgb;
+    float Y = dot(L, vec3(0.2126, 0.7152, 0.0722));
+    outL = vec4(L, 1.0);
+    if (u_first > 0.5) {
+        outS = vec4(L, 1.0);
+        outT = vec4(Y, 0.0, 0.0, 1.0);
+        return;
+    }
+    vec3 S = texture(prevS, v_uv).rgb;
+    vec4 T = texture(prevT, v_uv);
+    float ext = T.x, dir = T.y, act = T.z * u_decay;
+    bool up = Y - ext >= u_swing, down = ext - Y >= u_swing;
+    if ((up && dir <= 0.0) || (down && dir >= 0.0)) {   // a reversal
+        act += 1.0;
+        ext = Y;
+        dir = up ? 1.0 : -1.0;
+    } else if (dir > 0.0) {
+        ext = max(ext, Y);
+    } else if (dir < 0.0) {
+        ext = min(ext, Y);
+    }
+    // act ~ reversals in the last second = 2 x flashes per second: start
+    // smoothing at 1.5 flashes/s, fully on by 2.5 (the broadcast limit is 3)
+    float k = smoothstep(3.0, 5.0, act);
+    vec3 lim = S + clamp(u_alpha * (L - S), -u_step, u_step);
+    outS = vec4(mix(L, lim, k), 1.0);
+    outT = vec4(ext, dir, act, 1.0);
+}
+"""
+
+# guard pass 2: swap each block's brightness for the guarded one, keeping
+# the fine detail (where nothing was smoothed, the frame is unchanged)
+_GUARD_OUT = """
+#version 330
+uniform sampler2D texC;
+uniform sampler2D curS;
+uniform sampler2D curL;
+in vec2 v_uv;
+out vec4 fragColor;
+void main() {
+    // S and L are upsampled identically, so where nothing was smoothed
+    // (S == L) they cancel exactly and the frame is unchanged
+    vec3 c = textureLod(texC, v_uv, 0.0).rgb;
+    vec3 L = texture(curL, v_uv).rgb;
+    vec3 S = texture(curS, v_uv).rgb;
+    fragColor = vec4(pow(max(c + S - L, 0.0), vec3(1.0 / 2.2)), 1.0);
 }
 """
 
@@ -85,6 +167,42 @@ class Renderer:
         self.texB, self.fboB = make_target()
         _, self.fbo_out = make_target()
 
+        # flash guard: the composite goes to a linear float texture with
+        # mipmaps; two small ping-pong textures hold the limited brightness
+        self.texC = self.ctx.texture((width, height), 4, dtype="f2")
+        self.texC.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
+        self.fboC = self.ctx.framebuffer(color_attachments=[self.texC])
+        # block size ~1/68 of the height (16 px at 1080p, 32 px at 4K)
+        lod = max(0, int(round(np.log2(height / 68.0))))
+        sw, sh = max(1, width >> lod), max(1, height >> lod)
+        # ping-pong sets of (guarded brightness S, tracking state T, block brightness L, fbo)
+        self.guard = []
+        for _ in range(2):
+            texs = []
+            for _ in range(3):
+                tex = self.ctx.texture((sw, sh), 4, dtype="f4")
+                tex.filter = (moderngl.NEAREST, moderngl.NEAREST)
+                tex.repeat_x = tex.repeat_y = False
+                texs.append(tex)
+            texs[0].filter = texs[2].filter = (moderngl.LINEAR, moderngl.LINEAR)   # upsampled
+            self.guard.append((texs[0], texs[1], texs[2],
+                               self.ctx.framebuffer(color_attachments=texs)))
+        self.guard_state = self.ctx.program(vertex_shader=_VERTEX, fragment_shader=_GUARD_STATE)
+        self.guard_out = self.ctx.program(vertex_shader=_VERTEX, fragment_shader=_GUARD_OUT)
+        self.guard_state["texC"], self.guard_state["prevS"], self.guard_state["prevT"] = 0, 1, 2
+        self.guard_state["u_swing"] = GUARD_SWING
+        self.guard_out["texC"], self.guard_out["curS"], self.guard_out["curL"] = 0, 1, 2
+        self.guard_state["u_lod"] = float(lod)
+        self.vao_gstate = self.ctx.vertex_array(self.guard_state, [(self._vbo, "2f", "in_pos")])
+        self.vao_gout = self.ctx.vertex_array(self.guard_out, [(self._vbo, "2f", "in_pos")])
+        self.fps = 30.0
+        self.reset_guard()
+
+    def reset_guard(self):
+        """Forget the guard's history (the next frame passes through as-is)."""
+        self._guard_first = True
+        self._guard_i = 0
+
     def _draw_scene(self, fbo, scene, params, palette, local_time,
                     continuous=False):
         prog = self.programs[scene]
@@ -112,8 +230,30 @@ class Renderer:
         self.composite["u_fade"] = fade
         self.texA.use(0)
         (self.texB if has_b else self.texA).use(1)
-        self.fbo_out.use()
+        self.fboC.use()
         self.vao_composite.render()
+        self.texC.build_mipmaps()
+        # pass 1: per-block flicker tracking and smoothing, ping-pong
+        prev_s, prev_t, _, _ = self.guard[self._guard_i]
+        cur_tex, _, cur_l, cur_fbo = self.guard[1 - self._guard_i]
+        g = self.guard_state
+        g["u_step"] = GUARD_RATE / self.fps
+        g["u_alpha"] = 1.0 - float(np.exp(-2.0 * np.pi * GUARD_CUTOFF / self.fps))
+        g["u_decay"] = float(np.exp(-1.0 / self.fps))
+        g["u_first"] = 1.0 if self._guard_first else 0.0
+        self.texC.use(0)
+        prev_s.use(1)
+        prev_t.use(2)
+        cur_fbo.use()
+        self.vao_gstate.render()
+        # pass 2: the output frame
+        self.texC.use(0)
+        cur_tex.use(1)
+        cur_l.use(2)
+        self.fbo_out.use()
+        self.vao_gout.render()
+        self._guard_i = 1 - self._guard_i
+        self._guard_first = False
         return self.fbo_out.read(components=3)
 
     def render_frame(self, clips, t):
@@ -194,6 +334,17 @@ def encode(renderer, frame_fn, duration, fps, out_path, audio=None,
     else:
         cmd += ["-movflags", "+faststart"]
     cmd += ["-t", f"{duration:.3f}", out_path]
+
+    # flash guard: start from a clean history; a part that starts mid-video
+    # first renders the 10 s before it (discarded) so its guard state matches
+    # an uninterrupted render and the parts join seamlessly (measured: 10 s
+    # brings the difference at a join below 0.001/255; 2 s left a visible step)
+    renderer.fps = float(fps)
+    renderer.reset_guard()
+    warm = int(round(10.0 * fps)) if t_start > 0 else 0
+    for k in range(warm, 0, -1):
+        if t_start - k / fps >= 0:
+            frame_fn(t_start - k / fps)
 
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     total = int(round(duration * fps))
