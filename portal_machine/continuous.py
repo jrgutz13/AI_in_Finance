@@ -61,12 +61,19 @@ class ContinuousTrack:
         self.waypoints = [Waypoint(0.0,
                                    {k: base[k] for k in self._free_keys},
                                    random_palette(rng))]
+        # The palette's frequency (C) is kept for the whole video: shaders
+        # feed ever-growing time values into pal(), and C multiplies them, so
+        # hours in even a tiny drift in C would swing the colors every frame
+        # (full-screen color flashing). The colors still drift through new
+        # palettes via the offsets/mix (A, B, D), which are not multiplied.
+        c_fixed = self.waypoints[0].palette[2]
         t = 0.0
         while t < duration:
             t += rng.uniform(wp_min, wp_max)
             draw = scene.random_params(rng)
+            a, b, _, d = random_palette(rng)
             self.waypoints.append(Waypoint(
-                t, {k: draw[k] for k in self._free_keys}, random_palette(rng)))
+                t, {k: draw[k] for k in self._free_keys}, (a, b, c_fixed, d)))
 
     def eval(self, t):
         """Returns (params, palette) at absolute time t."""
