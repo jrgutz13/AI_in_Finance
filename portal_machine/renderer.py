@@ -2,11 +2,13 @@
 crossfades pairs of scenes in a composite pass, runs the flash guard, and
 pipes raw frames into ffmpeg for encoding.
 
-Flash guard (photosensitivity safety): the picture is divided into blocks
+Flash guard (optional, --flash-guard; off by default because it can soften
+fast-moving glows): the picture is divided into blocks
 (1/68 of the picture height: 16 pixels at 1080p) and each block's brightness
 is watched for back-and-forth flicker. Wherever a block flickers faster than
-about 1.5 times a second, its brightness is smoothed into a gentle fade (the
-fine detail is kept), so nothing can strobe at the rates that can trigger
+about 2.5 times a second (with 10% brightness swings, as the standards count
+flashes), its brightness is smoothed into a gentle fade (the fine detail is
+kept), so nothing can strobe at the rates that can trigger
 photosensitive seizures (broadcast rules allow at most 3 flashes per
 second), whatever a scene does. Normal motion isn't flicker, so it passes
 through untouched."""
@@ -48,7 +50,8 @@ void main() {
 }
 """
 
-GUARD_SWING = 0.06              # a brightness swing this big (linear) counts as a reversal
+GUARD_SWING = 0.10              # a brightness swing this big (linear) counts as a reversal
+                                # (the broadcast/WCAG flash threshold: 10% of white)
 GUARD_RATE = 0.6                # while smoothing: max change, 60% of white per second
 GUARD_CUTOFF = 0.5              # while smoothing: temporal low-pass cutoff, Hz
 
@@ -93,8 +96,9 @@ void main() {
         ext = min(ext, Y);
     }
     // act ~ reversals in the last second = 2 x flashes per second: start
-    // smoothing at 1.5 flashes/s, fully on by 2.5 (the broadcast limit is 3)
-    float k = smoothstep(3.0, 5.0, act);
+    // smoothing at 2.5 flashes/s, fully on by 3.25 (the broadcast limit is
+    // 3). Ordinary motion - a line or glow sweeping past - never gets here.
+    float k = smoothstep(5.0, 6.5, act);
     vec3 lim = S + clamp(u_alpha * (L - S), -u_step, u_step);
     outS = vec4(mix(L, lim, k), 1.0);
     outT = vec4(ext, dir, act, 1.0);
@@ -110,13 +114,19 @@ uniform sampler2D curS;
 uniform sampler2D curL;
 in vec2 v_uv;
 out vec4 fragColor;
+vec3 corr(vec2 uv) { return texture(curS, uv).rgb - texture(curL, uv).rgb; }
 void main() {
-    // S and L are upsampled identically, so where nothing was smoothed
-    // (S == L) they cancel exactly and the frame is unchanged
+    // the correction (guarded minus actual block brightness) is zero wherever
+    // nothing was smoothed, so the frame is unchanged there; where it isn't,
+    // it is spread over neighbouring blocks so it can't show block edges
+    vec2 e = 1.0 / vec2(textureSize(curS, 0));
+    vec3 D = corr(v_uv) * 0.25
+           + (corr(v_uv + vec2(e.x, 0.0)) + corr(v_uv - vec2(e.x, 0.0))
+              + corr(v_uv + vec2(0.0, e.y)) + corr(v_uv - vec2(0.0, e.y))) * 0.125
+           + (corr(v_uv + e) + corr(v_uv - e)
+              + corr(v_uv + vec2(e.x, -e.y)) + corr(v_uv + vec2(-e.x, e.y))) * 0.0625;
     vec3 c = textureLod(texC, v_uv, 0.0).rgb;
-    vec3 L = texture(curL, v_uv).rgb;
-    vec3 S = texture(curS, v_uv).rgb;
-    fragColor = vec4(pow(max(c + S - L, 0.0), vec3(1.0 / 2.2)), 1.0);
+    fragColor = vec4(pow(max(c + D, 0.0), vec3(1.0 / 2.2)), 1.0);
 }
 """
 
@@ -134,7 +144,7 @@ def _create_context():
 
 
 class Renderer:
-    def __init__(self, width, height, scene_names=None, speed_scale=1.0):
+    def __init__(self, width, height, scene_names=None, speed_scale=1.0, flash_guard=False):
         self.width, self.height = width, height
         # multiplies every scene's motion rate; 0.5 = half speed
         self.speed_scale = speed_scale
@@ -196,7 +206,21 @@ class Renderer:
         self.vao_gstate = self.ctx.vertex_array(self.guard_state, [(self._vbo, "2f", "in_pos")])
         self.vao_gout = self.ctx.vertex_array(self.guard_out, [(self._vbo, "2f", "in_pos")])
         self.fps = 30.0
+        self.flash_guard = flash_guard
         self.reset_guard()
+        # without the guard, the composite writes the output directly
+        self.composite_direct = self.ctx.program(
+            vertex_shader=_VERTEX, fragment_shader=_COMPOSITE.replace(
+                "fragColor = vec4(pow(max(c.rgb, 0.0), vec3(2.2)), 1.0);     // to linear light",
+                # a fixed, invisible dither (+-1 level) breaks up the banding
+                # 8-bit video shows in smooth dark gradients
+                "vec2 q = floor(gl_FragCoord.xy);"
+                " float n = fract(sin(dot(q, vec2(12.9898, 78.233))) * 43758.5453)"
+                " + fract(sin(dot(q, vec2(39.3468, 11.135))) * 24634.6345) - 1.0;"
+                " fragColor = vec4(c.rgb + n / 255.0, 1.0);"))
+        self.composite_direct["texA"], self.composite_direct["texB"] = 0, 1
+        self.vao_direct = self.ctx.vertex_array(self.composite_direct,
+                                                [(self._vbo, "2f", "in_pos")])
 
     def reset_guard(self):
         """Forget the guard's history (the next frame passes through as-is)."""
@@ -227,6 +251,13 @@ class Renderer:
         self.vaos[scene].render()
 
     def _composite(self, fade, has_b):
+        if not self.flash_guard:
+            self.composite_direct["u_fade"] = fade
+            self.texA.use(0)
+            (self.texB if has_b else self.texA).use(1)
+            self.fbo_out.use()
+            self.vao_direct.render()
+            return self.fbo_out.read(components=3)
         self.composite["u_fade"] = fade
         self.texA.use(0)
         (self.texB if has_b else self.texA).use(1)
@@ -341,7 +372,7 @@ def encode(renderer, frame_fn, duration, fps, out_path, audio=None,
     # brings the difference at a join below 0.001/255; 2 s left a visible step)
     renderer.fps = float(fps)
     renderer.reset_guard()
-    warm = int(round(10.0 * fps)) if t_start > 0 else 0
+    warm = int(round(10.0 * fps)) if t_start > 0 and renderer.flash_guard else 0
     for k in range(warm, 0, -1):
         if t_start - k / fps >= 0:
             frame_fn(t_start - k / fps)

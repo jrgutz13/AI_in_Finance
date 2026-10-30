@@ -110,6 +110,9 @@ def main(argv=None):
                     help="bitrate ceiling in Mbit/s; keeps file size bounded "
                          "even on very noisy scenes (default: auto from "
                          "resolution, 0 = no ceiling)")
+    ap.add_argument("--flash-guard", action="store_true",
+                    help="extra safety net: smooth any rapid large-area flicker while "
+                         "rendering (can soften fast-moving glows; off by default)")
     ap.add_argument("--speed-scale", type=float, default=1.0, metavar="X",
                     help="multiply how fast everything moves: 0.5 = half "
                          "speed, 2 = double (default 1)")
@@ -193,6 +196,7 @@ def main(argv=None):
         "out": args.out or os.path.join("output", f"portal_{seed}.mp4"),
         "part_length": args.part_length,
         "speed_scale": args.speed_scale,
+        "flash_guard": args.flash_guard,
     }
     return run(settings, still=args.still, ignore_space=args.ignore_space)
 
@@ -257,7 +261,8 @@ def run(settings, still=None, ignore_space=False, resuming=False):
 
     # .get() so part manifests written before this option existed still resume
     renderer = Renderer(w, h, scene_names=unique,
-                        speed_scale=settings.get("speed_scale", 1.0))
+                        speed_scale=settings.get("speed_scale", 1.0),
+                        flash_guard=settings.get("flash_guard", False))
 
     if still is not None:
         png = out.rsplit(".", 1)[0] + f"_t{still:.0f}.png"

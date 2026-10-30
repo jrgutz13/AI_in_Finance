@@ -171,12 +171,12 @@ plays those first (partial names are fine), then the rest alphabetically.
 
 ## Flashing safety
 
-Every video goes through a **flash guard** while it renders: the picture is
-watched block by block for back-and-forth flicker, and anything flickering
-faster than about 1.5 times a second is smoothed into a gentle fade. Normal
-motion isn't touched (it's pixel-identical), but nothing can strobe at the
-rates that can trigger photosensitive seizures (broadcast and web rules allow
-at most 3 flashes per second), at any point in a video of any length.
+The styles are built so nothing flickers rapidly, however long the video:
+settings that would speed up over hours (and cause the late rapid flicker
+older renders showed) are fixed for the whole video, and every style was
+checked at the start and 2.5 hours in. `--flash-guard` adds an optional extra
+safety net that smooths any rapid large-area flicker while rendering (it can
+soften fast-moving glows, so it is off by default).
 
 To check any video, drag it onto **`check_flashing.bat`** (or
 `python3 flash_check.py video.mp4`). It reports PASS/FAIL and the moments
