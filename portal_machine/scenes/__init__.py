@@ -262,6 +262,17 @@ SCENES = {
                                    # ring number, which grows all video long: drifting it
                                    # would make ring colors race (flicker) hours in
         ),
+        SceneDef(
+            "rainbow_square_tunnel", "Rainbow Square Tunnel",
+            speed=(0.85, 1.05),
+            p1=(0.4, 0.9),         # how much the tunnel bends
+            p2=(0.10, 0.22),       # twist per square (radians)
+            p3=(0.85, 1.15),       # fly speed
+            p4=(0.035, 0.07),      # rainbow step per square
+            # twist and rainbow step multiply the square number, which grows
+            # all video long: they must not drift (they'd race and flicker)
+            locked=("p2", "p3", "p4"),
+        ),
     ]
 }
 

@@ -2,7 +2,7 @@
 
 A video generator for long-form psychedelic visuals: portal tunnels,
 kaleidoscopes, infinite zooms of many kinds, wormholes, mandalas, and
-Refik Anadol-style data sculptures — 22 styles in all. It renders videos of
+Refik Anadol-style data sculptures — 23 styles in all. It renders videos of
 any length (3-hour meditation videos included), and every run produces a
 completely different video. No stock footage, no licensing.
 
@@ -87,6 +87,7 @@ to force a single-style continuous render.
 | `ripple_dive` | soft luminous ripples gliding out of infinite depth |
 | `neon_stars` | floating through deep space past glowing neon outline stars; far stars soft and out of focus |
 | `neon_star_tunnel` | flying down a winding, twisting tunnel of glowing neon star outlines |
+| `rainbow_square_tunnel` | flying down a spiraling tunnel of glowing rainbow neon squares |
 | `halloween_tunnel` | spooky winding tunnel of neon jack-o'-lanterns with scary carved faces, embers and a foggy moon |
 
 All traveling scenes fly FORWARD (into the screen / toward the viewer), and
