@@ -110,6 +110,36 @@ How to make AI video clips on your own computer with the free Wan 2.2 model
 (prompt in, video out), plus prompt ideas: `ai_video/WAN_2.2_GUIDE.txt`.
 The Clip Stitcher below joins the clips into longer videos.
 
+## Enhance Clips (your clips, your order, slow motion, upscaling, music)
+
+For a folder of short clips (AI-generated or otherwise) where you decide
+exactly how they're strung together. Drag the folder onto
+**`enhance_clips.bat`**. The first time, it writes **`clips_plan.txt`** into
+the folder - listing every clip - and opens it in Notepad. Edit it and run
+the .bat again:
+
+```
+length: 3h            # the sequence repeats until the video is this long
+resolution: 1080p     # 720p, 1080p, 1440p or 4k: every clip is upscaled to this
+crossfade: 2          # seconds each clip blends into the next
+music: C:\Users\me\Music\Halloween     # a song or a folder of songs
+music order: Skeleton Dance; Dark Walk
+
+pumpkin field.mp4
+ghost forest.mp4   slow 2         # half speed (slow 3 = one-third speed)
+candles.mp4        trim 2-8       # only seconds 2-8
+moon clouds.mp4    slow 1.5  repeat 2
+```
+
+Clips play in the order listed (unlisted clips are left out; names can be
+partial). Before rendering it shows the full plan, the length and any names
+it couldn't find. Slow motion and upscaling use free AI tools on the graphics
+card - RIFE and Real-ESRGAN, downloaded on first use (about 500 MB) into
+`tools\` - with ffmpeg's methods as the fallback. Each clip is processed once,
+however often the sequence repeats, and kept in a `_work` folder, so changing
+the order, crossfade or music later re-renders in minutes. Prepared clips are
+flash-checked.
+
 ## Clip Stitcher (long videos from short clips and images)
 
 AI video generators make clips of 5-20 seconds. The stitcher turns a

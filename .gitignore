@@ -4,3 +4,5 @@ output/
 *.mp4
 python_cmd.txt
 ai_video/wan_path.txt
+tools/
+*_work/
