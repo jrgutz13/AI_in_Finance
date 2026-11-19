@@ -121,6 +121,7 @@ the .bat again:
 ```
 length: 3h            # the sequence repeats until the video is this long
 resolution: 1080p     # 720p, 1080p, 1440p or 4k: every clip is upscaled to this
+upscale: standard     # standard (fast) or ai (sharper, many times slower)
 crossfade: 2          # seconds each clip blends into the next
 music: C:\Users\me\Music\Halloween     # a song or a folder of songs
 music order: Skeleton Dance; Dark Walk
@@ -133,9 +134,10 @@ moon clouds.mp4    slow 1.5  repeat 2
 
 Clips play in the order listed (unlisted clips are left out; names can be
 partial). Before rendering it shows the full plan, the length and any names
-it couldn't find. Slow motion and upscaling use free AI tools on the graphics
-card - RIFE and Real-ESRGAN, downloaded on first use (about 500 MB) into
-`tools\` - with ffmpeg's methods as the fallback. Each clip is processed once,
+it couldn't find. Slow motion uses RIFE, a free AI tool on the graphics card
+(downloaded on first use into `tools\`); upscaling uses a fast standard method
+unless the plan says `upscale: ai` (Real-ESRGAN: sharper, but slow at 4K).
+ffmpeg's methods are the fallback if an AI step fails. Each clip is processed once,
 however often the sequence repeats, and kept in a `_work` folder, so changing
 the order, crossfade or music later re-renders in minutes. Prepared clips are
 flash-checked.
