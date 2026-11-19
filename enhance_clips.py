@@ -115,6 +115,12 @@ def run(cmd, what):
     return r
 
 
+def natural_key(name):
+    """Sort like Windows Explorer: numbers by value (2 before 10), case ignored."""
+    return [(0, int(t), "") if t.isdigit() else (1, 0, t)
+            for t in re.split(r"(\d+)", name.lower()) if t]
+
+
 def _norm(text):
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
@@ -442,13 +448,23 @@ def main(argv=None):
         return 1
     files = sorted((f for f in os.listdir(folder)
                     if os.path.splitext(f)[1].lower() in VIDEO_EXTS
-                    and os.path.isfile(os.path.join(folder, f))), key=str.lower)
+                    and os.path.isfile(os.path.join(folder, f))), key=natural_key)
     plan_path = os.path.abspath(args.plan) if args.plan else os.path.join(folder, PLAN_NAME)
     if not os.path.exists(plan_path):
         if not files:
             print(f"No video clips found in {folder}")
             return 1
-        write_starter(folder, plan_path, files)
+        listing = files
+        if args.confirm:
+            print(f"Found {len(files)} clips. List them in the plan in which order?")
+            print("  1  by name, as Windows Explorer sorts them (1, 2, 10 ...)")
+            print("  2  by date modified, oldest first")
+            print("  3  by date modified, newest first")
+            pick = input("Choose 1-3 [press Enter for 1]: ").strip()
+            if pick in ("2", "3"):
+                listing = sorted(files, key=lambda f: os.path.getmtime(os.path.join(folder, f)),
+                                 reverse=pick == "3")
+        write_starter(folder, plan_path, listing)
         print(f"Wrote a starter plan listing all {len(files)} clips:\n  {plan_path}")
         print("Edit it (order, slow motion, trims, music), save, and run this again.")
         return 3                                    # tells the .bat to open the plan
