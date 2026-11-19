@@ -10,6 +10,7 @@ listing every clip. Edit it (see the notes at its top), then run again:
 
     length: 3h            the clip sequence repeats until the video is this long
     resolution: 1080p     every clip is upscaled to this (720p/1080p/1440p/4k)
+    upscale: standard     standard (fast) or ai (sharper, much slower)
     crossfade: 2          seconds each clip blends into the next
     music: C:\\...\\songs    a music file or a folder of songs (optional)
     music order: Song A; Song B
@@ -18,9 +19,11 @@ listing every clip. Edit it (see the notes at its top), then run again:
     candles.mp4       trim 2-8       only seconds 2-8 of the clip
     moon.mp4          slow 1.5  repeat 2
 
-Slow motion and upscaling use free AI tools on the graphics card - RIFE
-(frame interpolation) and Real-ESRGAN (upscaling), downloaded on first use
-into tools\\ - and fall back to ffmpeg's methods if they're unavailable.
+Slow motion uses RIFE, a free AI frame-interpolation tool, on the graphics
+card. Upscaling uses a fast standard (lanczos) method unless the plan says
+"upscale: ai", which uses Real-ESRGAN - sharper, but many times slower,
+especially at 4K. The tools are downloaded on first use into tools\\, and
+ffmpeg's methods are the fallback if they're unavailable.
 Each clip is processed once and reused every time the sequence repeats, and
 everything is cached in a work folder, so after a crash, or after changing
 the order, the crossfade or the music, a re-run only redoes what changed."""
@@ -141,6 +144,8 @@ def write_starter(folder, plan_path, clips):
         "#  video is this long; delete the line to play the sequence just once)",
         "resolution: 1080p",
         "# (720p, 1080p, 1440p or 4k - every clip is upscaled to this)",
+        "upscale: standard",
+        "# (standard = fast; ai = sharper, but many times slower, especially at 4k)",
         "crossfade: 2",
         "# (seconds each clip blends into the next)",
         "# music: C:\\path\\to\\a song or a folder of songs",
@@ -163,12 +168,12 @@ def write_starter(folder, plan_path, clips):
 
 
 OPTION_RE = re.compile(r"\s+(slow\s+[\d.]+x?|trim\s+[\d.:]+\s*-\s*[\d.:]+|repeat\s+\d+x?)\s*$", re.I)
-HEADER_KEYS = {"length", "resolution", "crossfade", "fps", "music", "musicorder",
+HEADER_KEYS = {"length", "resolution", "upscale", "crossfade", "fps", "music", "musicorder",
                "musiccrossfade", "output"}
 
 
 def parse_plan(path):
-    settings = {"length": None, "resolution": "1080p", "crossfade": 2.0, "fps": 24,
+    settings = {"length": None, "resolution": "1080p", "upscale": "standard", "crossfade": 2.0, "fps": 24,
                 "music": None, "musicorder": "", "musiccrossfade": 4.0, "output": None}
     entries, problems = [], []
     with open(path, encoding="utf-8-sig") as f:
@@ -220,6 +225,14 @@ def parse_plan(path):
             problems.append(f"line {n}: slow must be between 1 and 8 ({name})")
             opts["slow"] = min(max(opts["slow"], 1.0), 8.0)
         entries.append({"line": n, "name": name, **opts})
+    up = str(settings["upscale"]).lower()
+    if up.startswith("ai"):
+        settings["upscale"] = "ai"
+    elif up.startswith("standard") or up.startswith("fast") or up.startswith("normal"):
+        settings["upscale"] = "standard"
+    else:
+        problems.append(f"upscale '{settings['upscale']}' - use standard or ai")
+        settings["upscale"] = "standard"
     res = str(settings["resolution"]).lower().replace(" ", "")
     if res in RESOLUTIONS:
         settings["size"] = RESOLUTIONS[res]
@@ -280,15 +293,18 @@ def download_tool(tools_dir, key):
     return exe
 
 
-def get_tools(tools_dir, mode, ask):
-    """{key: exe or None}. mode: auto (download if missing) or off."""
-    found = {k: (find_tool(tools_dir, k) if mode != "off" else None) for k in TOOLS}
-    missing = [k for k, v in found.items() if not v]
+def get_tools(tools_dir, mode, ask, wanted):
+    """{key: exe or None} for the tools in `wanted`. mode: auto (download if
+    missing) or off."""
+    found = {k: (find_tool(tools_dir, k) if mode != "off" and k in wanted else None) for k in TOOLS}
+    missing = [k for k, v in found.items() if not v and k in wanted]
     if mode == "off" or not missing:
         return found
     what = " and ".join(TOOLS[k]["what"] for k in missing)
     if ask:
-        ans = input(f"\nDownload the free {what} tools (about 500 MB, one time only)? [Y/n]: ")
+        size = "about 500 MB" if len(missing) == 2 else ("about 430 MB" if "rife" in missing else "about 50 MB")
+        ans = input(f"\nDownload the free {what} tool{'s' if len(missing) > 1 else ''} "
+                    f"({size}, one time only)? [Y/n]: ")
         if ans.strip().lower().startswith("n"):
             return found
     for k in missing:
@@ -497,7 +513,8 @@ def main(argv=None):
 
     # ---- summary ----
     print(f"plan       {plan_path}")
-    print(f"video      {W}x{H} @ {fps} fps, crossfade {S['crossfade']:g} s")
+    print(f"video      {W}x{H} @ {fps} fps, crossfade {S['crossfade']:g} s, "
+          f"{'AI' if S['upscale'] == 'ai' else 'standard'} upscaling")
     print(f"clips      {len(clips)} in the sequence:")
     for k, c in enumerate(clips, 1):
         part = f"{c['start']:g}-{c['start'] + c['len']:g} s" if (c["start"] > 0 or c["len"] < c["info"]["dur"] - 0.05) else "all"
@@ -524,7 +541,12 @@ def main(argv=None):
                                                                     os.path.basename(folder) + ".mp4"))
     print(f"output     {out}")
 
-    tools = get_tools(args.tools_dir, args.ai, args.confirm)
+    wanted = set()
+    if any(c["slow"] > 1 for c in clips):
+        wanted.add("rife")
+    if S["upscale"] == "ai" and any(c["info"]["h"] < H * 0.95 for c in clips):
+        wanted.add("upscaler")
+    tools = get_tools(args.tools_dir, args.ai, args.confirm, wanted)
     ai_desc = ", ".join(TOOLS[k]["what"] for k, v in tools.items() if v) or "none (ffmpeg methods)"
     print(f"AI tools   {ai_desc}")
     if args.confirm:
