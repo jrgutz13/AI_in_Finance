@@ -397,10 +397,20 @@ def prep_ai(src, start, length, slow, S, out, tools, tmp, info):
 
 # ---------------------------------------------------------------------------
 
+def maxrate_mbps(W, H, fps):
+    """Bitrate ceiling, same rule as the main generator (~8 Mbit/s at
+    1080p24, ~32 at 4K24): keeps file sizes predictable on busy footage."""
+    return max(6, round(W * H * fps * 0.16 / 1e6))
+
+
 def encode_args(S):
+    W, H = S["size"]
+    cap = maxrate_mbps(W, H, S["fps"])
+    capargs = ["-maxrate", f"{cap}M", "-bufsize", f"{2 * cap}M"]
     if S["codec"] == "h264_nvenc":
-        return ["-c:v", "h264_nvenc", "-cq", "19", "-preset", "p5", "-rc", "vbr", "-g", str(S["fps"] * 2)]
-    return ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-g", str(S["fps"] * 2)]
+        return ["-c:v", "h264_nvenc", "-cq", "19", "-preset", "p5", "-rc", "vbr",
+                "-g", str(S["fps"] * 2)] + capargs
+    return ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-g", str(S["fps"] * 2)] + capargs
 
 
 def make_piece(kind, S, out, a, b=None):
@@ -556,6 +566,20 @@ def main(argv=None):
     out = os.path.abspath(args.out or S["output"] or os.path.join(HERE, "output",
                                                                     os.path.basename(folder) + ".mp4"))
     print(f"output     {out}")
+    # disk: the final video (at most the bitrate cap), plus the work folder:
+    # prepared clips (one pass, high quality) and the encoded pieces (one pass)
+    cap = maxrate_mbps(W, H, fps)
+    final_gb = cap * 1e6 / 8 * total / fps / 1e9
+    pass_s = sum(c["frames"] for c in clips) / fps if clips else 0
+    work_gb = pass_s * (cap * 2.5 + cap) * 1e6 / 8 / 1e9 + 1.5     # + temporary frames, tools
+    free_gb = shutil.disk_usage(os.path.dirname(out) if os.path.isdir(os.path.dirname(out))
+                                else HERE).free / 1e9
+    print(f"size       video up to {final_gb:.0f} GB, work folder up to {work_gb:.0f} GB "
+          f"(free: {free_gb:.0f} GB)")
+    if final_gb + work_gb > free_gb * 0.95:
+        problems.append(f"not enough disk space: needs up to {final_gb + work_gb:.0f} GB, "
+                        f"{free_gb:.0f} GB free (try a lower resolution or a shorter length)")
+        print(f"PROBLEM: {problems[-1]}")
 
     wanted = set()
     if any(c["slow"] > 1 for c in clips):
