@@ -184,9 +184,14 @@ def parse_plan(path):
     entries, problems = [], []
     with open(path, encoding="utf-8-sig") as f:
         lines = f.read().splitlines()
+    commented_music = None
     for n, raw in enumerate(lines, 1):
         line = raw.strip()
         if not line or line.startswith("#"):
+            # a real path on a still-commented music line: easy to miss
+            m = re.match(r"^#+\s*music\s*:\s*(.+)$", line, re.I)
+            if m and "path\\to" not in m.group(1) and commented_music is None:
+                commented_music = (n, m.group(1).strip())
             continue
         m = re.match(r"^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$", line)
         if m and _norm(m.group(1)) in HEADER_KEYS:
@@ -231,6 +236,9 @@ def parse_plan(path):
             problems.append(f"line {n}: slow must be between 1 and 8 ({name})")
             opts["slow"] = min(max(opts["slow"], 1.0), 8.0)
         entries.append({"line": n, "name": name, **opts})
+    if commented_music and not settings["music"]:
+        problems.append(f"line {commented_music[0]}: the music line still starts with # so it is "
+                        f"ignored - delete the # to add {commented_music[1]}")
     up = str(settings["upscale"]).lower()
     if up.startswith("ai"):
         settings["upscale"] = "ai"
@@ -552,9 +560,11 @@ def main(argv=None):
                                                       if len(order) > len(clips) else ""))
         print(f"length     {fmt(total / fps)}" + (f" (asked for {fmt(S['length'])}, rounded up to end on "
                                                    "a whole clip)" if S["length"] else ""))
-    if music_files:
-        print(f"music      {len(music_files)} song(s), crossfading {S['musiccrossfade']:g} s, "
-              "repeating for the whole video")
+    if len(music_files) == 1:
+        print("music      1 song, looping back to back for the whole video")
+    elif music_files:
+        print(f"music      {len(music_files)} songs, crossfading {S['musiccrossfade']:g} s, "
+              "the playlist repeating for the whole video")
         for m in music_files[:12]:
             print(f"           - {os.path.basename(m)}")
         for name in music_missing:
